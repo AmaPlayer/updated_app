@@ -34,7 +34,7 @@ export interface RoleConfig {
 export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
   athlete: {
     id: 'athlete',
-    label: 'Athlete',
+    label: 'Player',
     description: 'Compete, train, and share your athletic journey',
     icon: Trophy,
     colors: {
