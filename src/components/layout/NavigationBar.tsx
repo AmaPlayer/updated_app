@@ -35,7 +35,6 @@ const NavigationBar = ({ currentUser, isGuest, onTitleClick, title = "AmaPlayer"
 
   const handleSettingsToggle = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('⚙️ Settings toggle clicked, current state:', settingsOpen);
     setNotificationsOpen(false); // Close notifications if open
     setSettingsOpen(!settingsOpen);
   };
@@ -46,7 +45,6 @@ const NavigationBar = ({ currentUser, isGuest, onTitleClick, title = "AmaPlayer"
 
   const handleNotificationsToggle = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('🔔 Notification toggle clicked, current state:', notificationsOpen);
     setSettingsOpen(false); // Close settings if open
     setNotificationsOpen(!notificationsOpen);
   };

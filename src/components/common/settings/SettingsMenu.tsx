@@ -40,12 +40,9 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ isOpen, onClose, isGuest, t
       }
     };
 
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 250);
+    document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
-      clearTimeout(timeoutId);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen, onClose, triggerButtonRef]);
@@ -153,12 +150,7 @@ const SettingsMenu: React.FC<SettingsMenuProps> = ({ isOpen, onClose, isGuest, t
     }
   };
 
-  if (!isOpen) {
-    console.log('⚙️ SettingsMenu: isOpen is false, not rendering');
-    return null;
-  }
-
-  console.log('⚙️ SettingsMenu: Rendering. isGuest=', isGuest, 'currentUser=', currentUser?.uid);
+  if (!isOpen) return null;
 
   return (
     <div

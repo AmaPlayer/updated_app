@@ -100,15 +100,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
     };
 
     if (isOpen) {
-      // Delay adding the listener to avoid catching the same click that opened it
-      const timeoutId = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-      }, 250);
-
-      return () => {
-        clearTimeout(timeoutId);
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
+      document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
@@ -175,11 +167,9 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
       case 'friend_request':
         return <UserPlus size={16} className="notification-icon follow" />;
       case 'story_view':
-        return <Eye size={16} className="notification-icon story" />;
       case 'story_like':
-        return <Heart size={16} className="notification-icon like" />;
       case 'story_comment':
-        return <MessageCircle size={16} className="notification-icon comment" />;
+        return <Eye size={16} className="notification-icon story" />;
       default:
         return <Bell size={16} className="notification-icon default" />;
     }
@@ -204,12 +194,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
     return date.toLocaleDateString();
   };
 
-  if (!isOpen) {
-    console.log('🔕 NotificationDropdown: isOpen is false, not rendering');
-    return null;
-  }
-
-  console.log('🔔 NotificationDropdown: Rendering with', notifications.length, 'notifications');
+  if (!isOpen) return null;
 
   return (
     <div className="notification-dropdown" ref={dropdownRef}>
