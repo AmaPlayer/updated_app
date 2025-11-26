@@ -9,6 +9,7 @@ import SettingsMenu from '../../components/common/settings/SettingsMenu';
 import NotificationDropdown from '../../components/common/notifications/NotificationDropdown';
 import SafeImage from '../../components/common/SafeImage';
 import notificationService from '../../services/notificationService';
+import friendsService from '../../services/api/friendsService';
 import './Search.css';
 
 interface UserData {
@@ -29,12 +30,10 @@ interface UserData {
 
 interface FriendRequest {
   id: string;
-  senderId: string;
-  receiverId: string;
-  senderName: string;
-  senderPhoto: string;
-  receiverName: string;
-  receiverPhoto: string;
+  requesterId: string;
+  recipientId: string;
+  requesterName: string;
+  recipientName: string;
   status: string;
   timestamp: any;
 }
@@ -91,15 +90,16 @@ export default function Search() {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [notificationsOpen, setNotificationsOpen] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
 
   const fetchSentRequests = useCallback(() => {
     if (!currentUser) return;
-    
+
     const q = query(
       collection(db, 'friendRequests'),
-      where('senderId', '==', currentUser.uid)
+      where('requesterId', '==', currentUser.uid)
     );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -598,38 +598,48 @@ export default function Search() {
     if (!currentUser) return;
 
     try {
-      const requestStatus = getRequestStatus(userId);
-      
-      if (requestStatus === 'pending') {
-        // Cancel friend request
-        const request = sentRequests.find(req => req.receiverId === userId);
-        if (request) {
-          await deleteDoc(doc(db, 'friendRequests', request.id));
-          alert('Friend request cancelled');
+      // Set loading state to prevent rapid clicks
+      setLoadingRequestId(userId);
+
+      // Check if a request already exists
+      const existingRequest = await friendsService.checkFriendRequestExists(currentUser.uid, userId);
+
+      if (existingRequest) {
+        // Request exists - check its status
+        if (existingRequest.status === 'pending') {
+          // Cancel the pending request
+          await deleteDoc(doc(db, 'friendRequests', existingRequest.id));
+          console.log('✅ Friend request cancelled');
+        } else if (existingRequest.status === 'accepted') {
+          // Already friends
+          alert('You are already friends with this user');
+        } else {
+          alert('Friend request status: ' + existingRequest.status);
         }
       } else {
-        // Send friend request
+        // No existing request - send new friend request
         await addDoc(collection(db, 'friendRequests'), {
-          senderId: currentUser.uid,
-          receiverId: userId,
-          senderName: currentUser.displayName || 'Anonymous User',
-          senderPhoto: currentUser.photoURL || '',
-          receiverName: userName,
-          receiverPhoto: userPhoto || '',
+          requesterId: currentUser.uid,
+          recipientId: userId,
+          requesterName: currentUser.displayName || 'Anonymous User',
+          recipientName: userName,
           status: 'pending',
           timestamp: serverTimestamp()
         });
-        
-        alert('Friend request sent!');
+
+        console.log('✅ Friend request sent to:', userName);
       }
     } catch (error: any) {
-      console.error('Error with friend request:', error);
-      alert('Failed to update friend request');
+      console.error('❌ Error with friend request:', error);
+      alert('Failed to update friend request: ' + error.message);
+    } finally {
+      // Clear loading state
+      setLoadingRequestId(null);
     }
   };
 
   const getRequestStatus = (userId: string): string | null => {
-    const request = sentRequests.find(req => req.receiverId === userId);
+    const request = sentRequests.find(req => req.recipientId === userId);
     if (!request) return null;
     return request.status;
   };
@@ -1029,16 +1039,6 @@ export default function Search() {
                 <div className="user-actions">
                   <div className="social-actions">
                     {(() => {
-                      // Debug logging for search button state
-                      console.log('🔘 Search button state for user:', user.displayName, {
-                        userId: user.id,
-                        isFriend,
-                        requestStatus,
-                        friendshipsCount: friendships.length,
-                        sentRequestsCount: sentRequests.length,
-                        allFriendships: friendships.map(f => ({id: f.id, user1: f.user1, user2: f.user2}))
-                      });
-                      
                       if (isFriend) {
                         return (
                           <button className="friend-btn" disabled>

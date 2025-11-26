@@ -424,22 +424,30 @@
 .profile-action-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
   margin-top: 16px;
   width: 100%;
+  overflow: hidden;
 }
 
 @media (min-width: 480px) {
   .profile-action-buttons {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px;
     align-items: center;
+    overflow: visible;
   }
 }
 
 @media (min-width: 768px) {
+  .profile-action-buttons {
+    gap: 10px;
+  }
+}
+
+@media (min-width: 1024px) {
   .profile-action-buttons {
     gap: 14px;
   }
@@ -454,19 +462,23 @@
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 12px 24px;
-  font-size: 14px;
+  padding: 10px 14px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-height: 44px;
-  min-width: 120px;
+  min-height: 36px;
+  min-width: auto;
   box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 @media (min-width: 768px) {
@@ -474,9 +486,23 @@
   .connect-btn,
   .pending-btn,
   .add-friend-btn {
+    padding: 12px 24px;
+    font-size: 14px;
+    min-width: auto;
+    min-height: 40px;
+    border-radius: 8px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .message-btn,
+  .connect-btn,
+  .pending-btn,
+  .add-friend-btn {
     padding: 14px 32px;
     font-size: 16px;
     min-width: 140px;
+    min-height: 44px;
     border-radius: 10px;
   }
 }

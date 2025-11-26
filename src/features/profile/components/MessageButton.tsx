@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageSquare, Link2, Loader } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { organizationConnectionService } from '../../../services/api/organizationConnectionService';
+import friendsService from '../../../services/api/friendsService';
 import { db } from '../../../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -84,22 +85,41 @@ const MessageButton: React.FC<MessageButtonProps> = ({
     try {
       // Handle athlete-to-athlete friend requests
       if (currentUserRole === 'athlete' && targetUserRole === 'athlete') {
-        // Import friend request service on demand
-        const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+        // Check if request already exists
+        const existingRequest = await friendsService.checkFriendRequestExists(currentUser.uid, targetUserId);
 
-        // Create friend request in Firestore
-        await addDoc(collection(db, 'friendRequests'), {
-          requesterId: currentUser.uid,
-          requesterName: currentUser.displayName || 'Unknown Athlete',
-          requesterPhotoURL: currentUser.photoURL || '',
-          recipientId: targetUserId,
-          recipientName: targetUserName,
-          status: 'pending',
-          timestamp: serverTimestamp(),
-          message: `${currentUser.displayName || 'An athlete'} wants to be your friend`
-        });
+        if (existingRequest) {
+          // Request exists - check its status
+          if (existingRequest.status === 'pending') {
+            // Cancel the pending request
+            const { deleteDoc, doc: docRef } = await import('firebase/firestore');
+            await deleteDoc(docRef(db, 'friendRequests', existingRequest.id));
+            console.log('✅ Friend request cancelled');
+          } else if (existingRequest.status === 'accepted') {
+            // Already friends
+            setError('You are already friends with this user');
+            return;
+          } else {
+            setError('Friend request status: ' + existingRequest.status);
+            return;
+          }
+        } else {
+          // No existing request - send new friend request
+          const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
 
-        console.log('✅ Friend request sent from athlete to athlete');
+          await addDoc(collection(db, 'friendRequests'), {
+            requesterId: currentUser.uid,
+            requesterName: currentUser.displayName || 'Unknown Athlete',
+            requesterPhotoURL: currentUser.photoURL || '',
+            recipientId: targetUserId,
+            recipientName: targetUserName,
+            status: 'pending',
+            timestamp: serverTimestamp(),
+            message: `${currentUser.displayName || 'An athlete'} wants to be your friend`
+          });
+
+          console.log('✅ Friend request sent from athlete to athlete');
+        }
       } else if (currentUserRole === 'organization' || (currentUserRole === 'athlete' && targetUserRole === 'organization')) {
         // Handle organization-to-athlete connections
         if (currentUserRole === 'organization') {
@@ -149,7 +169,7 @@ const MessageButton: React.FC<MessageButtonProps> = ({
         onConnectionRequest();
       }
     } catch (err: any) {
-      console.error('Error sending connection request:', err);
+      console.error('❌ Error sending connection request:', err);
       setError(err.message || 'Failed to send connection request');
     } finally {
       setLoading(false);

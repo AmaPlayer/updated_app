@@ -188,6 +188,54 @@ class FriendsService {
       return 0;
     }
   }
+
+  /**
+   * Check if a friend request already exists between two users
+   * Returns the request if found, null otherwise
+   * Filters out rejected requests in code to avoid composite index requirement
+   */
+  async checkFriendRequestExists(
+    userId: string,
+    targetUserId: string
+  ): Promise<any | null> {
+    try {
+      const friendRequestsRef = collection(db, 'friendRequests');
+
+      // Query for existing requests from userId to targetUserId
+      // Note: We don't use != operator to avoid requiring composite indexes
+      const q = query(
+        friendRequestsRef,
+        where('requesterId', '==', userId),
+        where('recipientId', '==', targetUserId)
+      );
+
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      // Filter rejected requests in code (exclude rejected status)
+      const validDocs = snapshot.docs.filter(doc => {
+        const data = doc.data();
+        return data.status !== 'rejected';
+      });
+
+      if (validDocs.length === 0) {
+        return null;
+      }
+
+      // Return the first (and should be only) matching request
+      const doc = validDocs[0];
+      return {
+        id: doc.id,
+        ...doc.data()
+      };
+    } catch (error) {
+      console.error('❌ Error checking friend request existence:', error);
+      throw error;
+    }
+  }
 }
 
 // Create singleton instance
