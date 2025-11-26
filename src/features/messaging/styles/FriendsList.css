@@ -78,6 +78,11 @@
 .friend-avatar-container {
   position: relative;
   flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .friend-avatar-enhanced {
@@ -153,28 +158,6 @@
   color: var(--text-muted);
   font-weight: var(--font-weight-normal);
   font-family: var(--font-family-primary);
-}
-
-/* Action Indicator */
-.friend-action-indicator {
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: all 0.2s ease;
-}
-
-.friend-card-enhanced:hover .friend-action-indicator {
-  opacity: 0.8;
-  transform: scale(1.1);
-  color: var(--accent-primary);
-}
-
-.chat-icon {
-  color: var(--text-secondary);
-  transition: color 0.2s ease;
-}
-
-.friend-card-enhanced:hover .chat-icon {
-  color: var(--accent-primary);
 }
 
 /* Empty State */
@@ -320,6 +303,11 @@
     min-height: 68px;
   }
   
+  .friend-avatar-container {
+    width: 44px;
+    height: 44px;
+  }
+
   .friend-avatar-enhanced {
     width: 44px;
     height: 44px;
@@ -339,11 +327,7 @@
   .friend-status {
     font-size: 0.8125rem;
   }
-  
-  .friend-action-indicator {
-    opacity: 0.6;
-  }
-  
+
   .friends-empty-state {
     padding: 40px 16px;
     min-height: 250px;
@@ -369,22 +353,22 @@
     min-height: 64px;
   }
   
+  .friend-avatar-container {
+    width: 40px;
+    height: 40px;
+  }
+
   .friend-avatar-enhanced {
     width: 40px;
     height: 40px;
   }
-  
+
   .friend-name {
     font-size: 0.875rem;
   }
-  
+
   .friend-status {
     font-size: 0.75rem;
-  }
-  
-  .friend-action-indicator .chat-icon {
-    width: 16px;
-    height: 16px;
   }
 }
 
@@ -436,11 +420,16 @@
     background: linear-gradient(135deg, var(--bg-card), rgba(0, 255, 136, 0.03));
   }
   
+  .friend-avatar-container {
+    width: 52px;
+    height: 52px;
+  }
+
   .friend-avatar-enhanced {
     width: 52px;
     height: 52px;
   }
-  
+
   .friend-card-enhanced:hover .friend-avatar-enhanced {
     transform: scale(1.06);
     border-color: var(--accent-primary);
@@ -521,12 +510,17 @@
     border-radius: 20px;
   }
   
+  .friend-avatar-container {
+    width: 56px;
+    height: 56px;
+  }
+
   .friend-avatar-enhanced {
     width: 56px;
     height: 56px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .friend-card-enhanced:hover .friend-avatar-enhanced {
     transform: scale(1.1);
     border-color: var(--accent-primary);
@@ -606,33 +600,38 @@
     min-height: 56px;
   }
   
+  .friend-avatar-container {
+    width: 40px;
+    height: 40px;
+  }
+
   .friend-avatar-enhanced {
     width: 40px;
     height: 40px;
   }
-  
+
   .friend-name {
     font-size: 0.9375rem;
   }
-  
+
   .friend-status {
     font-size: 0.8125rem;
   }
-  
+
   .friends-empty-state {
     padding: 40px 20px;
     min-height: 200px;
   }
-  
+
   .empty-icon {
     width: 40px;
     height: 40px;
   }
-  
+
   .friends-empty-state h3 {
     font-size: 1.125rem;
   }
-  
+
   .friends-empty-state p {
     font-size: 0.875rem;
   }

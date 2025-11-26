@@ -158,9 +158,6 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
               >
                 <User size={16} />
               </button>
-              <div className="friend-action-indicator">
-                <MessageCircle size={18} className="chat-icon" />
-              </div>
             </div>
           </div>
           );
