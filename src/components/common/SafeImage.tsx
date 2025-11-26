@@ -157,7 +157,7 @@ const SafeImage: React.FC<SafeImageProps> = ({
         // Only fallback if still loading (image didn't load yet)
         if (prev.isLoading && !prev.hasError) {
           // eslint-disable-next-line no-console
-          console.warn(`⚠️ Image took too long to load: ${prev.currentSrc}`);
+          console.warn(`⚠️ Image took too long to load (timeout: 15s) - possibly rate-limited by CDN/429: ${prev.currentSrc}`);
           return {
             ...prev,
             isLoading: false,
@@ -166,7 +166,7 @@ const SafeImage: React.FC<SafeImageProps> = ({
         }
         return prev;
       });
-    }, 5000); // 5 second timeout
+    }, 15000); // 15 second timeout - increased to handle rate-limited Google image responses (429 errors)
 
     return () => clearTimeout(timeoutId);
   }, [loadingState.isLoading, loadingState.hasError, loadingState.currentSrc]);

@@ -85,12 +85,16 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
             aria-label={`Start chat with ${friend.displayName || 'Anonymous User'}`}
           >
             <div className="friend-avatar-container">
-              <SafeImage 
-                src={friend.photoURL || ''} 
+              <SafeImage
+                src={friend.photoURL || ''}
                 alt={friend.displayName || 'Anonymous User'}
                 placeholder="avatar"
                 className="friend-avatar-enhanced"
                 loading="lazy"
+                onError={(e) => {
+                  console.error(`🖼️ Friend avatar failed (possibly 429 rate limit): ${friend.id}`, e);
+                  // Don't change state - just show placeholder
+                }}
               />
               {friend.isOnline && (
                 <div className="online-status-indicator" aria-label="Online">
