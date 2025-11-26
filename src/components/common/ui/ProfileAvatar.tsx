@@ -7,6 +7,7 @@ interface ProfileAvatarProps {
   size?: number;
   className?: string;
   style?: CSSProperties;
+  onError?: (error: SyntheticEvent<HTMLImageElement>) => void;
 }
 
 const ProfileAvatar: React.FC<ProfileAvatarProps> = memo(function ProfileAvatar({
@@ -14,7 +15,8 @@ const ProfileAvatar: React.FC<ProfileAvatarProps> = memo(function ProfileAvatar(
   alt,
   size = 32,
   className = '',
-  style = {}
+  style = {},
+  onError: onErrorProp
 }) {
   const imageSource = useMemo(() => {
     if (!src) {
@@ -45,6 +47,11 @@ const ProfileAvatar: React.FC<ProfileAvatarProps> = memo(function ProfileAvatar(
     const target = e.target as HTMLImageElement;
     target.src = getPlaceholderImage('avatar', size);
     target.onerror = null;
+
+    // Call optional onError callback
+    if (onErrorProp) {
+      onErrorProp(e);
+    }
   };
 
   return (
@@ -57,6 +64,7 @@ const ProfileAvatar: React.FC<ProfileAvatarProps> = memo(function ProfileAvatar(
       loading="eager"
       decoding="sync"
       draggable={false}
+      crossOrigin="anonymous"
     />
   );
 });
