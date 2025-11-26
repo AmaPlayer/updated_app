@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Circle, User } from 'lucide-react';
+import { MessageCircle, Circle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { navigateToProfile } from '../../../utils/navigation/profileNavigation';
@@ -115,7 +115,14 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
             }}
             aria-label={`Start chat with ${friend.displayName || 'Anonymous User'}`}
           >
-            <div className="friend-avatar-container">
+            <div
+              className="friend-avatar-container"
+              onClick={(e) => handleProfileClick(e, friend.id)}
+              role="button"
+              tabIndex={-1}
+              title="View profile"
+              aria-label={`View ${friend.displayName || 'user'}'s profile`}
+            >
               <ProfileAvatar
                 src={shouldLoadAvatar ? friend.photoURL : undefined}
                 alt={friend.displayName || 'Anonymous User'}
@@ -147,17 +154,6 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
                   <span className="status-offline">Offline</span>
                 )}
               </div>
-            </div>
-            
-            <div className="friend-actions">
-              <button
-                className="profile-action-btn"
-                onClick={(e) => handleProfileClick(e, friend.id)}
-                title="View profile"
-                aria-label={`View ${friend.displayName || 'user'}'s profile`}
-              >
-                <User size={16} />
-              </button>
             </div>
           </div>
           );
