@@ -3,7 +3,7 @@ import { MessageCircle, Circle, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { navigateToProfile } from '../../../utils/navigation/profileNavigation';
-import SafeImage from '../../../components/common/SafeImage';
+import ProfileAvatar from '../../../components/common/ui/ProfileAvatar';
 import '../styles/FriendsList.css';
 
 interface Friend {
@@ -70,8 +70,8 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
       
       <div className="friends-list-grid">
         {friends.map((friend) => (
-          <div 
-            key={friend.id} 
+          <div
+            key={friend.id}
             className="friend-card-enhanced"
             onClick={() => onSelectFriend(friend)}
             role="button"
@@ -85,16 +85,11 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
             aria-label={`Start chat with ${friend.displayName || 'Anonymous User'}`}
           >
             <div className="friend-avatar-container">
-              <SafeImage
-                src={friend.photoURL || ''}
+              <ProfileAvatar
+                src={friend.photoURL}
                 alt={friend.displayName || 'Anonymous User'}
-                placeholder="avatar"
-                className="friend-avatar-enhanced"
-                loading="lazy"
-                onError={(e) => {
-                  console.error(`🖼️ Friend avatar failed (possibly 429 rate limit): ${friend.id}`, e);
-                  // Don't change state - just show placeholder
-                }}
+                size={48}
+                className="friend-avatar"
               />
               {friend.isOnline && (
                 <div className="online-status-indicator" aria-label="Online">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowLeft, MoreVertical, Phone, Video, Circle } from 'lucide-react';
-import SafeImage from '../../../components/common/SafeImage';
+import ProfileAvatar from '../../../components/common/ui/ProfileAvatar';
 import '../styles/ChatHeader.css';
 
 interface Friend {
@@ -39,12 +39,11 @@ export default function ChatHeader({
         
         <div className="chat-user-info">
           <div className="chat-avatar-container">
-            <SafeImage 
-              src={friend.photoURL || ''} 
+            <ProfileAvatar
+              src={friend.photoURL}
               alt={friend.displayName || 'Anonymous User'}
-              placeholder="avatar"
-              className="chat-avatar-enhanced"
-              loading="lazy"
+              size={48}
+              className="chat-avatar"
             />
             {friend.isOnline && (
               <div className="chat-online-indicator" aria-label="Online">
