@@ -146,6 +146,31 @@ const SafeImage: React.FC<SafeImageProps> = ({
     onLoad?.();
   }, [onLoad]);
 
+  // Add timeout fallback to prevent infinite spinners (5 seconds)
+  useEffect(() => {
+    if (!loadingState.isLoading || loadingState.hasError) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setLoadingState(prev => {
+        // Only fallback if still loading (image didn't load yet)
+        if (prev.isLoading && !prev.hasError) {
+          // eslint-disable-next-line no-console
+          console.warn(`⚠️ Image took too long to load: ${prev.currentSrc}`);
+          return {
+            ...prev,
+            isLoading: false,
+            hasError: true
+          };
+        }
+        return prev;
+      });
+    }, 5000); // 5 second timeout
+
+    return () => clearTimeout(timeoutId);
+  }, [loadingState.isLoading, loadingState.hasError, loadingState.currentSrc]);
+
   const handleImageError = useCallback((event: React.SyntheticEvent<HTMLImageElement, Event>) => {
     onError?.(event.nativeEvent);
     tryNextFallback();
@@ -191,12 +216,18 @@ const SafeImage: React.FC<SafeImageProps> = ({
           onLoad={handleImageLoad}
           onError={handleImageError}
           className={`safe-image ${loadingState.isLoading ? 'safe-image--loading' : ''}`}
-          style={{ display: loadingState.isLoading ? 'none' : 'block', ...style }}
+          style={{
+            opacity: loadingState.isLoading ? 0 : 1,
+            visibility: loadingState.isLoading ? 'hidden' : 'visible',
+            transition: 'opacity 0.3s ease, visibility 0.3s ease',
+            ...style
+          }}
           loading={loading}
           width={width}
           height={height}
           data-threshold={threshold}
           data-root-margin={rootMargin}
+          crossOrigin="anonymous"
         />
       )}
     </div>
