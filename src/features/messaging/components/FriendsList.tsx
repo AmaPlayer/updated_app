@@ -144,7 +144,10 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
               >
                 {friend.displayName || 'Anonymous User'}
               </div>
-              <div className="friend-status">
+              <div
+                className="friend-status"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {friend.isOnline ? (
                   <span className="status-online">
                     <Circle size={6} fill="currentColor" />
