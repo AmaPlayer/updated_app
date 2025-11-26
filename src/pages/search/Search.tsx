@@ -1026,7 +1026,6 @@ export default function Search() {
                 </div>
                 <div className="user-info" onClick={() => navigate(`/profile/${user.id}`)}>
                   <strong>{user.displayName || 'Anonymous User'}</strong>
-                  <p>{user.bio || 'No bio available'}</p>
                   <div className="user-details">
                     {user.role && <span className="user-role">{user.role}</span>}
                     {user.location && <span className="user-location"><MapPin size={12} />{user.location}</span>}
@@ -1034,7 +1033,6 @@ export default function Search() {
                     {user.sex && <span className="user-sex">{user.sex}</span>}
                     {user.age && <span className="user-age"><Calendar size={12} />{user.age} years</span>}
                   </div>
-                  {user.email && <span className="user-email">{user.email}</span>}
                 </div>
                 <div className="user-actions">
                   <div className="social-actions">
