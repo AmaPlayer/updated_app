@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogIn, Eye, EyeOff, Shield } from 'lucide-react';
+import PasswordResetDialog from './PasswordResetDialog';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -9,6 +10,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
   
   const { login, currentUser, isAdmin } = useAuth();
 
@@ -98,6 +100,18 @@ const Login: React.FC = () => {
               </div>
             </div>
 
+            {/* Forgot Password Link */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPasswordReset(true)}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                disabled={loading}
+              >
+                Forgot password?
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -121,6 +135,14 @@ const Login: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {/* Password Reset Dialog */}
+        {showPasswordReset && (
+          <PasswordResetDialog
+            onClose={() => setShowPasswordReset(false)}
+            initialEmail={email}
+          />
+        )}
       </div>
     </div>
   );

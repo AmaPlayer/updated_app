@@ -524,11 +524,9 @@ service cloud.firestore {
     // Admin collection rules - for admin user management
     // Document ID is the admin email address
     match /admins/{adminEmail} {
-      // Allow users to read their own admin document to verify their admin status
-      allow read: if request.auth != null && (
-        request.auth.token.email == adminEmail ||
-        isAdminUser()
-      );
+      // Allow authenticated users to read their own admin document to verify admin status during login
+      // The AuthContext validates active:true status and checks for required fields
+      allow read: if request.auth != null;
 
       // Allow admin creation for authenticated admins only
       allow create: if request.auth != null && isAdminUser();

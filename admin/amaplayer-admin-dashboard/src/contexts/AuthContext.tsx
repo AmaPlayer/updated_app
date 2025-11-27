@@ -43,8 +43,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      // Query Firestore admins collection by email (document ID is the email)
-      const adminDoc = await getDoc(doc(db, 'admins', user.email));
+      // Query Firestore admins collection by email (document ID is the email, normalized to lowercase)
+      const normalizedEmail = user.email.toLowerCase().trim();
+      const adminDoc = await getDoc(doc(db, 'admins', normalizedEmail));
 
       if (adminDoc.exists()) {
         const adminData = adminDoc.data();
@@ -75,15 +76,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Verify user is in admins collection and is active
       try {
-        console.log('🔍 Checking admin status for email:', user.email);
-        const adminDoc = await getDoc(doc(db, 'admins', user.email));
+        // Normalize email to lowercase for consistent Firestore queries
+        const normalizedEmail = user.email.toLowerCase().trim();
+        console.log('🔍 Checking admin status for email:', normalizedEmail);
+        const adminDoc = await getDoc(doc(db, 'admins', normalizedEmail));
 
         console.log('📄 Admin document exists:', adminDoc.exists());
 
         if (!adminDoc.exists()) {
-          console.log('❌ Document not found. Email:', user.email);
+          console.log('❌ Document not found. Email:', normalizedEmail);
           await signOut(auth);
-          throw new Error(`Access denied. Email "${user.email}" is not authorized as an admin.`);
+          throw new Error(`Access denied. Email "${normalizedEmail}" is not authorized as an admin.`);
         }
 
         const adminData = adminDoc.data();
@@ -103,6 +106,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // If it's our authorization error, rethrow it
         if (firestoreError.message.includes('Access denied') || firestoreError.message.includes('not authorized')) {
           throw firestoreError;
+        }
+        // If it's a permission error from Firestore rules, provide helpful message
+        if (firestoreError.code === 'permission-denied' || firestoreError.message.includes('Missing or insufficient permissions')) {
+          console.error('🔐 Firestore permission denied:', firestoreError);
+          await signOut(auth);
+          throw new Error('Admin verification failed: Firestore access denied. Please check security rules allow admin reads.');
         }
         // If it's a Firestore error, provide context
         console.error('🔥 Firestore error:', firestoreError);
