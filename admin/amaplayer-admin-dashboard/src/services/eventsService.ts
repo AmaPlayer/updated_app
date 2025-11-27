@@ -53,15 +53,24 @@ class EventsService {
   // Create new event
   async createEvent(eventData: Omit<Event, 'id' | 'createdAt' | 'updatedAt' | 'participants'>): Promise<string> {
     try {
+      // Filter out undefined values - Firestore doesn't allow undefined
+      const cleanedData: any = {};
+      Object.keys(eventData).forEach(key => {
+        const value = (eventData as any)[key];
+        if (value !== undefined) {
+          cleanedData[key] = value;
+        }
+      });
+
       const docRef = await addDoc(collection(db, this.collectionName), {
-        ...eventData,
+        ...cleanedData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         participants: [],
-        organizer: eventData.organizer || 'Admin',
-        contactEmail: eventData.contactEmail || 'admin@amaplayer.com'
+        organizer: cleanedData.organizer || 'Admin',
+        contactEmail: cleanedData.contactEmail || 'admin@amaplayer.com'
       });
-      
+
       console.log('Event created successfully with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
@@ -119,11 +128,21 @@ class EventsService {
   async updateEvent(eventId: string, updates: Partial<Event>): Promise<void> {
     try {
       const eventRef = doc(db, this.collectionName, eventId);
+
+      // Filter out undefined values - Firestore doesn't allow undefined
+      const cleanedUpdates: any = {};
+      Object.keys(updates).forEach(key => {
+        const value = (updates as any)[key];
+        if (value !== undefined) {
+          cleanedUpdates[key] = value;
+        }
+      });
+
       await updateDoc(eventRef, {
-        ...updates,
+        ...cleanedUpdates,
         updatedAt: serverTimestamp()
       });
-      
+
       console.log('Event updated successfully:', eventId);
     } catch (error) {
       console.error('Error updating event:', error);
