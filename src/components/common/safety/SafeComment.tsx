@@ -1,5 +1,6 @@
 // Safe Comment Component - Bulletproof comment rendering
 import React, { memo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Trash2, Edit2, Check, X, Heart } from 'lucide-react';
 import ProfileAvatar from '../ui/ProfileAvatar';
 import ErrorBoundary from './ErrorBoundary';
@@ -73,33 +74,46 @@ const SafeComment = memo(function SafeComment({
   };
   
   // Debug logging for production issues
-  if (process.env.NODE_ENV === 'development') {
-    const logger = require('../../../utils/logging/LoggingManager').default;
-    logger.rendering(`Rendering safe comment in ${context}:`, {
-      id: commentId,
-      displayName,
-      textLength: commentText.length,
-      hasPhoto: !!userPhoto,
-      canDelete: userId === currentUserId
-    });
-  }
+  // Disabled to prevent console flooding on every render
+  // if (process.env.NODE_ENV === 'development') {
+  //   const logger = require('../../../utils/logging/LoggingManager').default;
+  //   logger.rendering(`Rendering safe comment in ${context}:`, {
+  //     id: commentId,
+  //     displayName,
+  //     textLength: commentText.length,
+  //     hasPhoto: !!userPhoto,
+  //     canDelete: userId === currentUserId
+  //   });
+  // }
   
   return (
     <ErrorBoundary name={`SafeComment-${context}-${index}`}>
       <div className="comment" data-comment-id={commentId}>
-        <div className="comment-avatar">
-          <ProfileAvatar 
-            src={userPhoto} 
-            alt={`${displayName} avatar`}
-            size={32}
-          />
-        </div>
-        
+        <Link
+          to={`/profile/${userId}`}
+          className="comment-avatar-link"
+          title={`View ${displayName}'s profile`}
+        >
+          <div className="comment-avatar">
+            <ProfileAvatar
+              src={userPhoto}
+              alt={`${displayName} avatar`}
+              size={32}
+            />
+          </div>
+        </Link>
+
         <div className="comment-content">
           <div className="comment-header">
-            <strong className="comment-author">
-              {displayName}
-            </strong>
+            <Link
+              to={`/profile/${userId}`}
+              className="comment-author-link"
+              title={`View ${displayName}'s profile`}
+            >
+              <strong className="comment-author">
+                {displayName}
+              </strong>
+            </Link>
             <span className="comment-time">
               {safeFormatTimestamp(safeComment.timestamp)}
             </span>
@@ -145,16 +159,16 @@ const SafeComment = memo(function SafeComment({
                 // Check if user has liked - handle both string[] and object[] formats
                 const likes = (safeComment as any).likes || [];
 
-                // Debug logging
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('SafeComment - Like check:', {
-                    commentId,
-                    currentUserId,
-                    likes,
-                    likesType: typeof likes[0],
-                    isArray: Array.isArray(likes)
-                  });
-                }
+                // Debug logging - disabled to prevent console flooding
+                // if (process.env.NODE_ENV === 'development') {
+                //   console.log('SafeComment - Like check:', {
+                //     commentId,
+                //     currentUserId,
+                //     likes,
+                //     likesType: typeof likes[0],
+                //     isArray: Array.isArray(likes)
+                //   });
+                // }
 
                 const hasLiked = Array.isArray(likes) && currentUserId && likes.length > 0
                   ? typeof likes[0] === 'string'
@@ -162,9 +176,9 @@ const SafeComment = memo(function SafeComment({
                     : likes.some((like: any) => like?.userId === currentUserId)
                   : false;
 
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('SafeComment - hasLiked:', hasLiked);
-                }
+                // if (process.env.NODE_ENV === 'development') {
+                //   console.log('SafeComment - hasLiked:', hasLiked);
+                // }
 
                 return (
                   <div className="comment-like-section">

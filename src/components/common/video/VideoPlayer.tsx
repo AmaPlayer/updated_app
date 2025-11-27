@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Heart, MessageCircle, Share } from 'lucide-react';
+import { doc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
 import { MomentVideo, VideoPlayerState } from '../../../types/models/moment';
 import { MomentsService } from '../../../services/api/momentsService';
 import PostsService from '../../../services/api/postsService';
@@ -94,6 +96,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isLiking, setIsLiking] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [realtimeCommentCount, setRealtimeCommentCount] = useState<number>(moment.engagement.commentsCount || 0);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [networkQuality, setNetworkQuality] = useState<string>('unknown');
@@ -239,6 +242,40 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setVideoVisible(moment.id, isActive);
     }
   }, [isActive, moment.id, enablePerformanceOptimizations, setVideoVisible]);
+
+  // Real-time comment counter listener
+  useEffect(() => {
+    if (!moment.id) return;
+
+    let unsubscribe: Unsubscribe | null = null;
+
+    try {
+      unsubscribe = onSnapshot(
+        doc(db, 'moments', moment.id),
+        (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data();
+            // Update comment count from Firestore engagement.commentsCount field
+            setRealtimeCommentCount(data.engagement?.commentsCount || 0);
+          }
+        },
+        (error) => {
+          console.error('Error listening to moment updates:', error);
+          // Fallback to initial value if listener fails
+          setRealtimeCommentCount(moment.engagement.commentsCount || 0);
+        }
+      );
+    } catch (error) {
+      console.error('Error setting up comment count listener:', error);
+      setRealtimeCommentCount(moment.engagement.commentsCount || 0);
+    }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [moment.id, moment.engagement.commentsCount]);
 
   // Handle video play/pause based on isActive prop
   useEffect(() => {
@@ -875,13 +912,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             }
           }}
           disabled={!currentUserId}
-          aria-label={`View comments for video by ${moment.userDisplayName}. ${moment.engagement.commentsCount} comments`}
+          aria-label={`View comments for video by ${moment.userDisplayName}. ${realtimeCommentCount} comments`}
           title={currentUserId ? "View comments (C)" : "Sign in to comment"}
           tabIndex={0}
         >
           <MessageCircle size={28} strokeWidth={2.5} />
           <span className="engagement-count" aria-hidden="true">
-            {moment.engagement.commentsCount > 0 ? moment.engagement.commentsCount.toLocaleString() : ''}
+            {realtimeCommentCount > 0 ? realtimeCommentCount.toLocaleString() : ''}
           </span>
         </button>
 
@@ -905,9 +942,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Comments Modal */}
       <VideoComments
         momentId={moment.id}
-        currentUserId={currentUserId}
-        currentUserName={currentUserName}
-        currentUserPhotoURL={currentUserPhotoURL}
         isVisible={showComments}
         onClose={() => setShowComments(false)}
         isPostVideo={moment.isPostVideo || false}

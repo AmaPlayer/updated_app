@@ -1,17 +1,22 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
   serverTimestamp,
   where,
- 
+
 } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { eventsDb as db } from '../firebase/config-events';
+
+export interface EventRequirements {
+  description: string;
+  criteria?: string[];
+}
 
 export interface Event {
   id: string;
@@ -34,6 +39,12 @@ export interface Event {
   requirements?: string[];
   prizes?: string[];
   tags?: string[];
+  submissionDeadline?: any;
+  eventRequirements?: EventRequirements;
+  // Winner declaration fields (Phase 3)
+  winnerCount?: number;
+  winnersAnnouncedAt?: any;
+  announcedBy?: string;
 }
 
 class EventsService {

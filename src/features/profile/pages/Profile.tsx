@@ -968,6 +968,50 @@ const Profile: React.FC = React.memo(() => {
     }
   }, [announceToScreenReader, firebaseUser]);
 
+  // Handler for organization info modal
+  const handleSaveOrganizationInfo = useCallback(async (updatedPersonalDetails: PersonalDetails) => {
+    try {
+      // Update local state immediately for better UX
+      setPersonalDetails(updatedPersonalDetails);
+
+      // Save to Firebase
+      if (firebaseUser?.uid) {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('../../../lib/firebase');
+
+        const updateData = {
+          organizationName: updatedPersonalDetails.organizationName,
+          organizationType: updatedPersonalDetails.organizationType,
+          location: updatedPersonalDetails.location,
+          contactEmail: updatedPersonalDetails.contactEmail,
+          website: updatedPersonalDetails.website,
+          updatedAt: new Date()
+        };
+
+        // Filter out undefined values
+        const cleanedUpdateData = Object.fromEntries(
+          Object.entries(updateData).filter(([_, value]) => value !== undefined)
+        );
+
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        await updateDoc(userRef, cleanedUpdateData);
+
+        console.log('Organization info updated successfully in Firebase');
+
+        // Dispatch custom event to notify other components about profile update
+        window.dispatchEvent(new CustomEvent('userProfileUpdated', {
+          detail: { personalDetails: updatedPersonalDetails }
+        }));
+      }
+
+      announceToScreenReader('Organization information updated successfully');
+    } catch (error) {
+      console.error('Error saving organization info:', error);
+      announceToScreenReader('Failed to save organization information');
+      alert('Failed to save organization information. Please try again.');
+    }
+  }, [announceToScreenReader, firebaseUser]);
+
   // Handler for track best modal
   const handleSaveTrackBest = useCallback(async (updatedTrackBest: TrackBest) => {
     try {
@@ -1417,33 +1461,18 @@ const Profile: React.FC = React.memo(() => {
           setTargetUserRole(userData.role || 'athlete');
           setTargetUserDisplayName(userData.displayName || 'User');
 
-          // Check for pending organization connection requests
-          const orgConnReq = await organizationConnectionService.checkRequestExists(
+          // Check for any pending or accepted organization connection requests between the two users
+          const connectionStatus = await organizationConnectionService.getConnectionStatusBetweenUsers(
             firebaseUser.uid,
             userId
           );
 
-          if (orgConnReq && orgConnReq.status === 'pending') {
+          if (connectionStatus === 'pending') {
             setConnectionStatus('pending');
             return;
           }
 
-          // Check if approved connection exists
-          const approvedConns = await organizationConnectionService.getApprovedConnectionsForAthlete(
-            userId
-          );
-
-          if (approvedConns.some(conn => conn.organizationId === firebaseUser.uid)) {
-            setConnectionStatus('connected');
-            return;
-          }
-
-          // Also check the reverse: athlete connecting to organization
-          const orgConns = await organizationConnectionService.getApprovedConnectionsForOrganization(
-            userId
-          );
-
-          if (orgConns.some(conn => conn.athleteId === firebaseUser.uid)) {
+          if (connectionStatus === 'accepted') {
             setConnectionStatus('connected');
             return;
           }
@@ -1720,6 +1749,7 @@ const Profile: React.FC = React.memo(() => {
             personalDetails={personalDetails}
             isOwner={isOwner}
             onEditProfile={handleEditProfile}
+            onSaveOrganizationInfo={handleSaveOrganizationInfo}
           />
         </div>
 

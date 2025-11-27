@@ -3,12 +3,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { adaptFirebaseUser } from '../../utils/auth/userAdapter';
 import { usePostOperations } from '../../hooks/usePostOperations';
-import { useCommentOperations } from '../../hooks/useCommentOperations';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useSimpleAnalytics } from '../../utils/analytics/simpleAnalytics';
 import { sharePost } from './utils/shareUtils';
 import { initializeHomeFeatures } from './utils/initializationUtils';
-import { handleCommentSubmission, handleCommentDeletion } from './utils/commentUtils';
 import {
   handlePostLike,
   handlePostEdit,
@@ -101,8 +99,6 @@ function Home(): React.JSX.Element {
     likePost
   } = usePostOperations();
 
-  const { addComment, deleteComment } = useCommentOperations();
-
   const {
     showPrompt: showNotificationPrompt,
     loading: notificationLoading,
@@ -189,83 +185,6 @@ function Home(): React.JSX.Element {
   }, [likePost, trackBehavior, trackInteraction]);
 
 
-  const handleCommentSubmit = useCallback(async (postId: string, commentText: string) => {
-    const firebaseUserValue = firebaseUserRef.current;
-    const postsValue = postsRef.current;
-    
-    if (!firebaseUserValue || !commentText.trim()) return;
-    
-    if (isGuestUser) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const postData = postsValue.find(p => p.id === postId);
-      await addComment(postId, commentText.trim(), firebaseUserValue, postData, isGuestUser);
-      
-      // Track analytics
-      trackBehavior?.('comment_submitted', { postId });
-      trackInteraction?.('comment', postId, { userId: firebaseUserValue.uid });
-    } catch (error) {
-      console.error('Failed to submit comment:', error);
-    }
-  }, [isGuestUser, navigate, addComment, trackBehavior, trackInteraction]);
-  
-  const handleDeleteComment = useCallback(async (postId: string, commentIndex: number) => {
-    const firebaseUserValue = firebaseUserRef.current;
-    const postsValue = postsRef.current;
-
-    if (!firebaseUserValue) return;
-
-    await handleCommentDeletion(postId, commentIndex, firebaseUserValue, postsValue, deleteComment);
-  }, [deleteComment]);
-
-  const handleEditComment = useCallback(async (postId: string, commentIndex: number, newText: string) => {
-    const firebaseUserValue = firebaseUserRef.current;
-
-    if (!firebaseUserValue || !newText.trim()) return;
-
-    try {
-      const PostsService = (await import('../../services/api/postsService')).default;
-      await PostsService.editComment(postId, commentIndex, firebaseUserValue.uid, newText.trim());
-
-      // Refresh posts to show updated comment
-      await refreshPosts();
-    } catch (error) {
-      console.error('Failed to edit comment:', error);
-      alert('Failed to edit comment. Please try again.');
-    }
-  }, [refreshPosts]);
-
-  const handleLikeComment = useCallback(async (postId: string, commentIndex: number) => {
-    console.log('❤️ handleLikeComment called in Home.tsx:', { postId, commentIndex });
-
-    const firebaseUserValue = firebaseUserRef.current;
-
-    if (!firebaseUserValue) {
-      console.warn('⚠️ No firebase user found, cannot like comment');
-      return;
-    }
-
-    console.log('👤 User:', firebaseUserValue.uid);
-
-    try {
-      const PostsService = (await import('../../services/api/postsService')).default;
-      console.log('🚀 Calling toggleCommentLike...');
-
-      await PostsService.toggleCommentLike(postId, commentIndex, firebaseUserValue.uid);
-
-      console.log('✅ toggleCommentLike completed, now refreshing posts...');
-
-      // Refresh posts to show updated like count
-      await refreshPosts();
-
-      console.log('✅ Posts refreshed successfully');
-    } catch (error) {
-      console.error('❌ Failed to like comment:', error);
-    }
-  }, [refreshPosts]);
 
   const handleEnableNotifications = useCallback(async () => {
     const success = await enableNotifications();
@@ -341,14 +260,10 @@ function Home(): React.JSX.Element {
     onEditPost: handleEditPost,
     onSharePost: handleSharePost,
     onDeletePost: handleDeletePost,
-    onCommentSubmit: handleCommentSubmit,
-    onDeleteComment: handleDeleteComment,
-    onEditComment: handleEditComment,
-    onLikeComment: handleLikeComment,
     onUserClick: handleUserClick
   }), [posts, loading, hasMore, postsError, firebaseUser, isGuestUser,
     handleLoadMore, refreshPosts, handleLike, handleEditPost, handleSharePost,
-    handleDeletePost, handleCommentSubmit, handleDeleteComment, handleEditComment, handleLikeComment, handleUserClick]);
+    handleDeletePost, handleUserClick]);
 
   return (
     <ErrorBoundary name="Home">

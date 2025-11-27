@@ -9,18 +9,21 @@ import { Story } from '../types/models/story';
 /**
  * Notification type
  */
-type NotificationType = 
-  | 'like' 
-  | 'comment' 
-  | 'follow' 
-  | 'message' 
-  | 'story_like' 
-  | 'story_view' 
-  | 'story_comment' 
+type NotificationType =
+  | 'like'
+  | 'comment'
+  | 'follow'
+  | 'message'
+  | 'story_like'
+  | 'story_view'
+  | 'story_comment'
   | 'friend_request'
   | 'share_to_friend'
   | 'share_to_group'
-  | 'post_shared';
+  | 'post_shared'
+  | 'connection_request'
+  | 'connection_accepted'
+  | 'connection_rejected';
 
 /**
  * Notification data structure
@@ -693,6 +696,99 @@ class NotificationService {
     });
 
     console.log(`✅ Sent post shared notification to author: ${postAuthorId}`);
+  }
+
+  /**
+   * Send connection request notification (to recipient)
+   */
+  async sendConnectionRequestNotification(
+    recipientId: string,
+    senderName: string,
+    senderRole: 'organization' | 'coach',
+    senderPhotoURL: string,
+    connectionType: 'org_to_athlete' | 'coach_to_org'
+  ): Promise<void> {
+    const roleText = senderRole === 'organization' ? 'Organization' : 'Coach';
+    const icon = senderRole === 'organization' ? '🏢' : '👨‍🏫';
+
+    await this.sendNotificationToUser(recipientId, {
+      senderId: senderRole === 'organization' ? 'org-system' : 'coach-system',
+      senderName: roleText,
+      senderPhotoURL: senderPhotoURL || '',
+      type: 'connection_request',
+      message: `${senderName} wants to connect with you`,
+      title: `New Connection Request from ${senderName} ${icon}`,
+      data: {
+        connectionType,
+        senderRole,
+        senderName,
+        notificationType: 'connection_request'
+      }
+    });
+
+    console.log(`✅ Sent connection request notification to: ${recipientId}`);
+  }
+
+  /**
+   * Send connection accepted notification (to sender)
+   */
+  async sendConnectionAcceptedNotification(
+    senderId: string,
+    recipientName: string,
+    recipientRole: 'athlete' | 'organization',
+    recipientPhotoURL: string,
+    connectionType: 'org_to_athlete' | 'coach_to_org'
+  ): Promise<void> {
+    const roleText = recipientRole === 'athlete' ? 'Athlete' : 'Organization';
+    const icon = recipientRole === 'athlete' ? '🏃' : '🏢';
+
+    await this.sendNotificationToUser(senderId, {
+      senderId: recipientRole === 'athlete' ? 'athlete-system' : 'org-system',
+      senderName: roleText,
+      senderPhotoURL: recipientPhotoURL || '',
+      type: 'connection_accepted',
+      message: `${recipientName} accepted your connection request`,
+      title: `Connection Accepted! ${icon}`,
+      data: {
+        connectionType,
+        recipientRole,
+        recipientName,
+        notificationType: 'connection_accepted'
+      }
+    });
+
+    console.log(`✅ Sent connection accepted notification to: ${senderId}`);
+  }
+
+  /**
+   * Send connection rejected notification (to sender)
+   */
+  async sendConnectionRejectedNotification(
+    senderId: string,
+    recipientName: string,
+    recipientRole: 'athlete' | 'organization',
+    recipientPhotoURL: string,
+    connectionType: 'org_to_athlete' | 'coach_to_org'
+  ): Promise<void> {
+    const roleText = recipientRole === 'athlete' ? 'Athlete' : 'Organization';
+    const icon = recipientRole === 'athlete' ? '🏃' : '🏢';
+
+    await this.sendNotificationToUser(senderId, {
+      senderId: recipientRole === 'athlete' ? 'athlete-system' : 'org-system',
+      senderName: roleText,
+      senderPhotoURL: recipientPhotoURL || '',
+      type: 'connection_rejected',
+      message: `${recipientName} declined your connection request`,
+      title: `Connection Request Declined ${icon}`,
+      data: {
+        connectionType,
+        recipientRole,
+        recipientName,
+        notificationType: 'connection_rejected'
+      }
+    });
+
+    console.log(`✅ Sent connection rejected notification to: ${senderId}`);
   }
 }
 

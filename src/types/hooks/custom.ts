@@ -100,19 +100,6 @@ export interface UsePostInteractionsReturn {
   error: string | null;
 }
 
-// useCommentOperations return type
-export interface UseCommentOperationsReturn {
-  comments: Comment[];
-  loading: boolean;
-  error: string | null;
-  addComment: (postId: string, text: string, parentCommentId?: string) => Promise<void>;
-  updateComment: (postId: string, commentId: string, text: string) => Promise<void>;
-  deleteComment: (postId: string, commentId: string) => Promise<void>;
-  likeComment: (postId: string, commentId: string) => Promise<void>;
-  loadComments: (postId: string) => Promise<void>;
-  refreshComments: (postId: string) => Promise<void>;
-}
-
 // useNotifications return type
 export interface NotificationItem {
   id: string;

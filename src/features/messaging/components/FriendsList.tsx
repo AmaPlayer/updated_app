@@ -104,10 +104,24 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
           <div
             key={friend.id}
             className="friend-card-enhanced"
+            onClick={() => onSelectFriend(friend)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelectFriend(friend);
+              }
+            }}
+            title="Open chat"
+            aria-label={`Start chat with ${friend.displayName || 'Anonymous User'}`}
           >
             <div
               className="friend-avatar-container"
-              onClick={(e) => handleProfileClick(e, friend.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleProfileClick(e, friend.id);
+              }}
               role="button"
               tabIndex={-1}
               title="View profile"
@@ -127,11 +141,7 @@ export default function FriendsList({ friends, onSelectFriend, loading }: Friend
             </div>
             
             <div className="friend-info-enhanced">
-              <div 
-                className="friend-name clickable-profile-name"
-                onClick={(e) => handleProfileClick(e, friend.id)}
-                title="View profile"
-              >
+              <div className="friend-name">
                 {friend.displayName || 'Anonymous User'}
               </div>
               <div

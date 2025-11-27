@@ -230,17 +230,6 @@ const AchievementsCertificatesSection: React.FC<AchievementsCertificatesSectionP
                   : "This athlete hasn't added any achievements yet."
                 }
               </p>
-              {isOwner && (
-                <button
-                  className="empty-state-action"
-                  onClick={onAddAchievement}
-                  type="button"
-                  aria-label="Add your first achievement"
-                >
-                  <Plus size={20} aria-hidden="true" />
-                  Add Your First Achievement
-                </button>
-              )}
             </div>
           ) : (
             <div className="items-grid" role="list" aria-label="List of achievements">
@@ -367,17 +356,6 @@ const AchievementsCertificatesSection: React.FC<AchievementsCertificatesSectionP
                   : "This user hasn't added any certificates yet."
                 }
               </p>
-              {isOwner && (
-                <button
-                  className="empty-state-action"
-                  onClick={onAddCertificate}
-                  type="button"
-                  aria-label="Add your first certificate"
-                >
-                  <Plus size={20} aria-hidden="true" />
-                  Add Your First Certificate
-                </button>
-              )}
             </div>
           ) : (
             <div className="items-grid" role="list" aria-label="List of certificates">

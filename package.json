@@ -5,7 +5,9 @@
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^4.6.2",
     "@tanstack/react-query": "^5.84.2",
+    "dotenv": "^17.2.3",
     "firebase": "^11.10.0",
+    "firebase-admin": "^13.6.0",
     "lucide-react": "^0.525.0",
     "postprocessing": "^6.37.6",
     "react": "^19.1.0",

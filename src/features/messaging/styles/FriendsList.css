@@ -47,7 +47,7 @@
   gap: 16px;
   padding: 16px 20px;
   cursor: pointer;
-  transition: var(--transition-bounce);
+  transition: background 0.2s ease;
   border-bottom: 1px solid var(--border-secondary);
   background: var(--bg-card);
   position: relative;
@@ -60,7 +60,6 @@
 
 .friend-card-enhanced:hover {
   background: var(--bg-hover);
-  transform: translateX(4px);
 }
 
 .friend-card-enhanced:focus {
@@ -70,7 +69,6 @@
 }
 
 .friend-card-enhanced:active {
-  transform: translateX(2px);
   transition: transform 0.1s ease;
 }
 
@@ -91,12 +89,11 @@
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid var(--border-secondary);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .friend-card-enhanced:hover .friend-avatar-enhanced {
   border-color: var(--accent-primary);
-  transform: scale(1.05);
 }
 
 .online-status-indicator {
@@ -415,7 +412,6 @@
   }
   
   .friend-card-enhanced:hover {
-    transform: translateX(6px) translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 255, 136, 0.15);
     background: linear-gradient(135deg, var(--bg-card), rgba(0, 255, 136, 0.03));
   }
@@ -431,7 +427,6 @@
   }
 
   .friend-card-enhanced:hover .friend-avatar-enhanced {
-    transform: scale(1.06);
     border-color: var(--accent-primary);
   }
   
@@ -504,7 +499,6 @@
   }
   
   .friend-card-enhanced:hover {
-    transform: translateX(8px) translateY(-4px);
     box-shadow: 0 12px 32px rgba(0, 255, 136, 0.2);
     background: linear-gradient(135deg, var(--bg-card), rgba(0, 255, 136, 0.05));
     border-radius: 20px;
@@ -518,11 +512,10 @@
   .friend-avatar-enhanced {
     width: 56px;
     height: 56px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .friend-card-enhanced:hover .friend-avatar-enhanced {
-    transform: scale(1.1);
     border-color: var(--accent-primary);
     box-shadow: 0 4px 16px rgba(0, 255, 136, 0.3);
   }
@@ -532,11 +525,7 @@
     font-weight: 600;
     transition: color 0.3s ease;
   }
-  
-  .friend-card-enhanced:hover .friend-name {
-    color: var(--accent-primary);
-  }
-  
+
   .friend-status {
     font-size: 1.125rem;
   }
@@ -548,7 +537,6 @@
   
   .friend-card-enhanced:hover .friend-action-indicator {
     opacity: 1;
-    transform: scale(1.3);
     color: var(--accent-primary);
   }
   
@@ -658,15 +646,4 @@
     animation: none;
     opacity: 0.5;
   }
-}/* Prof
-ile navigation styles */
-.clickable-profile-name {
-  cursor: pointer;
-  transition: color 0.2s ease;
 }
-
-.clickable-profile-name:hover {
-  color: var(--accent-primary, #007bff);
-  text-decoration: underline;
-}
-

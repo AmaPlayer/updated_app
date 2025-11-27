@@ -109,6 +109,8 @@
   font-size: 14px;
   transition: all 0.2s ease;
   background: white;
+  color: #111827;
+  font-family: inherit;
 }
 
 .section-modal .form-input:focus {
@@ -124,6 +126,21 @@
 
 .section-modal .form-input::placeholder {
   color: #9ca3af;
+}
+
+/* Ensure visibility for select elements */
+.section-modal select,
+.section-modal textarea {
+  color: #111827 !important;
+  background: white !important;
+  font-family: inherit;
+}
+
+.section-modal select:focus,
+.section-modal textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .section-modal .form-error {

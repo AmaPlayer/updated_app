@@ -28,10 +28,12 @@ interface PasswordChangeState {
   success: string;
   passwordValidation: PasswordValidationResult | null;
   confirmPasswordError: string;
+  forgotPasswordMode: boolean;
+  verificationMethod: 'none' | 'oauth' | 'email';
 }
 
 const PasswordChangeSection: React.FC = () => {
-  const { currentUser, changePassword } = useAuth();
+  const { currentUser, changePassword, reauthenticateWithGoogle, reauthenticateWithApple, resetPassword } = useAuth();
   const { toasts, showSuccess, showError, showWarning } = useToast();
   const { confirmationState, showConfirmation, hideConfirmation } = useConfirmation();
   const [state, setState] = useState<PasswordChangeState>({
@@ -45,7 +47,9 @@ const PasswordChangeSection: React.FC = () => {
     error: '',
     success: '',
     passwordValidation: null,
-    confirmPasswordError: ''
+    confirmPasswordError: '',
+    forgotPasswordMode: false,
+    verificationMethod: 'none'
   });
 
   // Determine if user is a social login user
@@ -121,9 +125,9 @@ const PasswordChangeSection: React.FC = () => {
 
     // Validate new password
     if (!state.passwordValidation?.isValid) {
-      setState(prev => ({ 
-        ...prev, 
-        error: state.passwordValidation?.error || 'New password does not meet requirements' 
+      setState(prev => ({
+        ...prev,
+        error: state.passwordValidation?.error || 'New password does not meet requirements'
       }));
       return false;
     }
@@ -140,6 +144,153 @@ const PasswordChangeSection: React.FC = () => {
     }
 
     return true;
+  };
+
+  // Get OAuth provider for current user
+  const getOAuthProvider = (): 'google.com' | 'apple.com' | null => {
+    if (!currentUser) return null;
+    const googleProvider = currentUser.providerData.find(p => p.providerId === 'google.com');
+    if (googleProvider) return 'google.com';
+    const appleProvider = currentUser.providerData.find(p => p.providerId === 'apple.com');
+    if (appleProvider) return 'apple.com';
+    return null;
+  };
+
+  // Get user's account email (may be different from auth email)
+  const getUserEmail = (): string => {
+    return currentUser?.email || '';
+  };
+
+  // Show forgot password mode with alternative verification options
+  const handleForgotPassword = () => {
+    setState(prev => ({
+      ...prev,
+      forgotPasswordMode: true,
+      verificationMethod: 'none',
+      error: ''
+    }));
+  };
+
+  // Handle OAuth verification (Google or Apple)
+  const handleOAuthVerification = async (provider: 'google.com' | 'apple.com') => {
+    setState(prev => ({ ...prev, isLoading: true, error: '' }));
+
+    try {
+      console.log(`🔐 Attempting OAuth verification with ${provider}...`);
+
+      // Call appropriate OAuth reauthentication method
+      if (provider === 'google.com') {
+        await reauthenticateWithGoogle();
+      } else {
+        await reauthenticateWithApple();
+      }
+
+      // After successful OAuth verification, show confirmation dialog
+      const confirmationMessage = 'Are you sure you want to change your password? You will need to use the new password for future logins.';
+      const confirmed = await showConfirmation({
+        title: 'Change Password',
+        message: confirmationMessage,
+        confirmText: 'Change Password',
+        cancelText: 'Cancel',
+        variant: 'warning'
+      });
+
+      if (!confirmed) {
+        hideConfirmation();
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          forgotPasswordMode: false,
+          verificationMethod: 'none'
+        }));
+        return;
+      }
+
+      // Now update the password with OAuth verification
+      const result = await changePassword(state.newPassword, state.newPassword, false);
+
+      if (result.success) {
+        const successMessage = result.suggestedAction || 'Password updated successfully!';
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          success: successMessage,
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+          passwordValidation: null,
+          confirmPasswordError: '',
+          forgotPasswordMode: false,
+          verificationMethod: 'none'
+        }));
+
+        showSuccess('Password Updated', successMessage);
+      } else {
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: result.error || 'Failed to update password'
+        }));
+
+        showError('Failed to Update Password', result.error || 'An error occurred');
+      }
+    } catch (error: unknown) {
+      const errorMessage = (error as { message?: string }).message || 'OAuth verification failed. Please try again.';
+
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: errorMessage
+      }));
+
+      showError('Verification Failed', errorMessage);
+    } finally {
+      hideConfirmation();
+    }
+  };
+
+  // Handle email-based password reset
+  const handleEmailReset = async () => {
+    const userEmail = getUserEmail();
+    if (!userEmail) {
+      setState(prev => ({
+        ...prev,
+        error: 'Email address not found on your account'
+      }));
+      return;
+    }
+
+    setState(prev => ({ ...prev, isLoading: true, error: '' }));
+
+    try {
+      console.log(`📧 Sending password reset email to ${userEmail}...`);
+
+      // Send password reset email
+      await resetPassword(userEmail);
+
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        success: `Password reset email sent to ${userEmail}. Please check your inbox and follow the link to set your new password.`,
+        forgotPasswordMode: false,
+        verificationMethod: 'none'
+      }));
+
+      showSuccess(
+        'Reset Email Sent',
+        `Check your inbox at ${userEmail} for password reset instructions`
+      );
+    } catch (error: unknown) {
+      const errorMessage = (error as { message?: string }).message || 'Failed to send reset email. Please try again.';
+
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: errorMessage
+      }));
+
+      showError('Reset Failed', errorMessage);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -309,6 +460,71 @@ const PasswordChangeSection: React.FC = () => {
     );
   };
 
+  // Render alternative verification options when user forgets password
+  const renderAlternativeVerification = () => {
+    const oauthProvider = getOAuthProvider();
+
+    return (
+      <div className="alternative-verification">
+        <div className="verification-header">
+          <AlertCircle size={20} />
+          <h4>Don't Remember Your Password?</h4>
+        </div>
+
+        <p className="verification-info">
+          Verify your identity using one of these methods:
+        </p>
+
+        <div className="verification-options">
+          {oauthProvider === 'google.com' && (
+            <button
+              type="button"
+              className="verification-button google"
+              onClick={() => handleOAuthVerification('google.com')}
+              disabled={state.isLoading}
+            >
+              {state.isLoading ? '🔄 Verifying...' : '🔵 Verify with Google'}
+            </button>
+          )}
+
+          {oauthProvider === 'apple.com' && (
+            <button
+              type="button"
+              className="verification-button apple"
+              onClick={() => handleOAuthVerification('apple.com')}
+              disabled={state.isLoading}
+            >
+              {state.isLoading ? '🔄 Verifying...' : '🍎 Verify with Apple'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="verification-button email"
+            onClick={handleEmailReset}
+            disabled={state.isLoading}
+          >
+            {state.isLoading ? '📧 Sending...' : '📧 Send Reset Email'}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="back-button"
+          onClick={() => setState(prev => ({
+            ...prev,
+            forgotPasswordMode: false,
+            verificationMethod: 'none',
+            error: ''
+          }))}
+          disabled={state.isLoading}
+        >
+          ← Back to Password Form
+        </button>
+      </div>
+    );
+  };
+
   return (
     <>
       <ToastContainer toasts={toasts} position="top-right" />
@@ -332,116 +548,146 @@ const PasswordChangeSection: React.FC = () => {
       {renderUserTypeInfo()}
 
       <form onSubmit={handleSubmit} className="password-change-form">
-        {!isSocialUser && (
-          <div className="form-group">
-            <label htmlFor="currentPassword">Current Password</label>
-            <div className="password-input-container">
-              <input
-                type={state.showCurrentPassword ? 'text' : 'password'}
-                id="currentPassword"
-                value={state.currentPassword}
-                onChange={(e) => handleInputChange('currentPassword', e.target.value)}
-                placeholder="Enter your current password"
-                disabled={state.isLoading}
-                required
-              />
+        {!state.forgotPasswordMode ? (
+          <>
+            {!isSocialUser && (
+              <div className="form-group">
+                <label htmlFor="currentPassword">Current Password</label>
+                <div className="password-input-container">
+                  <input
+                    type={state.showCurrentPassword ? 'text' : 'password'}
+                    id="currentPassword"
+                    value={state.currentPassword}
+                    onChange={(e) => handleInputChange('currentPassword', e.target.value)}
+                    placeholder="Enter your current password"
+                    disabled={state.isLoading}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => togglePasswordVisibility('current')}
+                    aria-label={state.showCurrentPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {state.showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="forgot-password-link"
+                  onClick={handleForgotPassword}
+                  disabled={state.isLoading}
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="newPassword">
+                {isSocialUser ? 'New Password' : 'New Password'}
+              </label>
+              <div className="password-input-container">
+                <input
+                  type={state.showNewPassword ? 'text' : 'password'}
+                  id="newPassword"
+                  value={state.newPassword}
+                  onChange={(e) => handleInputChange('newPassword', e.target.value)}
+                  placeholder={isSocialUser ? 'Create a password' : 'Enter your new password'}
+                  disabled={state.isLoading}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => togglePasswordVisibility('new')}
+                  aria-label={state.showNewPassword ? 'Hide password' : 'Show password'}
+                >
+                  {state.showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {renderPasswordStrengthIndicator()}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="confirmPassword">Confirm New Password</label>
+              <div className="password-input-container">
+                <input
+                  type={state.showConfirmPassword ? 'text' : 'password'}
+                  id="confirmPassword"
+                  value={state.confirmPassword}
+                  onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                  placeholder="Confirm your new password"
+                  disabled={state.isLoading}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => togglePasswordVisibility('confirm')}
+                  aria-label={state.showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {state.showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              {state.confirmPasswordError && (
+                <div className="field-error">
+                  <AlertCircle size={14} />
+                  {state.confirmPasswordError}
+                </div>
+              )}
+            </div>
+
+            {state.error && (
+              <div className="form-error">
+                <AlertCircle size={16} />
+                {state.error}
+              </div>
+            )}
+
+            {state.success && (
+              <div className="form-success">
+                <CheckCircle size={16} />
+                {state.success}
+              </div>
+            )}
+
+            <div className="form-actions">
               <button
-                type="button"
-                className="password-toggle"
-                onClick={() => togglePasswordVisibility('current')}
-                aria-label={state.showCurrentPassword ? 'Hide password' : 'Show password'}
+                type="submit"
+                className="submit-button"
+                disabled={state.isLoading || !state.passwordValidation?.isValid || !!state.confirmPasswordError}
               >
-                {state.showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {state.isLoading ? (
+                  <>
+                    <LoadingSpinner size="small" color="white" className="in-button" />
+                    {isSocialUser ? 'Setting Password...' : 'Updating Password...'}
+                  </>
+                ) : (
+                  isSocialUser ? 'Set Password' : 'Update Password'
+                )}
               </button>
             </div>
-          </div>
-        )}
+          </>
+        ) : (
+          <>
+            {renderAlternativeVerification()}
 
-        <div className="form-group">
-          <label htmlFor="newPassword">
-            {isSocialUser ? 'New Password' : 'New Password'}
-          </label>
-          <div className="password-input-container">
-            <input
-              type={state.showNewPassword ? 'text' : 'password'}
-              id="newPassword"
-              value={state.newPassword}
-              onChange={(e) => handleInputChange('newPassword', e.target.value)}
-              placeholder={isSocialUser ? 'Create a password' : 'Enter your new password'}
-              disabled={state.isLoading}
-              required
-            />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => togglePasswordVisibility('new')}
-              aria-label={state.showNewPassword ? 'Hide password' : 'Show password'}
-            >
-              {state.showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-          {renderPasswordStrengthIndicator()}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="confirmPassword">Confirm New Password</label>
-          <div className="password-input-container">
-            <input
-              type={state.showConfirmPassword ? 'text' : 'password'}
-              id="confirmPassword"
-              value={state.confirmPassword}
-              onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-              placeholder="Confirm your new password"
-              disabled={state.isLoading}
-              required
-            />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => togglePasswordVisibility('confirm')}
-              aria-label={state.showConfirmPassword ? 'Hide password' : 'Show password'}
-            >
-              {state.showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-          {state.confirmPasswordError && (
-            <div className="field-error">
-              <AlertCircle size={14} />
-              {state.confirmPasswordError}
-            </div>
-          )}
-        </div>
-
-        {state.error && (
-          <div className="form-error">
-            <AlertCircle size={16} />
-            {state.error}
-          </div>
-        )}
-
-        {state.success && (
-          <div className="form-success">
-            <CheckCircle size={16} />
-            {state.success}
-          </div>
-        )}
-
-        <div className="form-actions">
-          <button
-            type="submit"
-            className="submit-button"
-            disabled={state.isLoading || !state.passwordValidation?.isValid || !!state.confirmPasswordError}
-          >
-            {state.isLoading ? (
-              <>
-                <LoadingSpinner size="small" color="white" className="in-button" />
-                {isSocialUser ? 'Setting Password...' : 'Updating Password...'}
-              </>
-            ) : (
-              isSocialUser ? 'Set Password' : 'Update Password'
+            {state.error && (
+              <div className="form-error">
+                <AlertCircle size={16} />
+                {state.error}
+              </div>
             )}
-          </button>
-        </div>
+
+            {state.success && (
+              <div className="form-success">
+                <CheckCircle size={16} />
+                {state.success}
+              </div>
+            )}
+          </>
+        )}
       </form>
     </div>
     </>

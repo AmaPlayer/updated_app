@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { 
-  User, 
-  signInWithEmailAndPassword, 
-  signOut, 
+import {
+  User,
+  signInWithEmailAndPassword,
+  signOut,
   onAuthStateChanged,
-  AuthError 
+  AuthError
 } from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { auth, db } from '../firebase/config';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -35,82 +36,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const adminEmail = process.env.REACT_APP_ADMIN_EMAIL;
-
   const checkAdminStatus = async (user: User | null) => {
-    if (user && adminEmail && user.email === adminEmail) {
-      // For the specific admin email, always allow access
-      setIsAdmin(true);
-    } else if (user) {
-      // For other users, check the admin collection in Firestore
-      try {
-        const { getFirestore, doc, getDoc } = await import('firebase/firestore');
-        const { db } = await import('../firebase/config');
-        const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-        
-        if (adminDoc.exists()) {
-          const adminData = adminDoc.data();
-          setIsAdmin(adminData.active === true);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch (error) {
-        console.error('Error checking admin status:', error);
+    if (!user || !user.email) {
+      setIsAdmin(false);
+      return;
+    }
+
+    try {
+      // Query Firestore admins collection by email (document ID is the email)
+      const adminDoc = await getDoc(doc(db, 'admins', user.email));
+
+      if (adminDoc.exists()) {
+        const adminData = adminDoc.data();
+        setIsAdmin(adminData.active === true);
+      } else {
         setIsAdmin(false);
       }
-    } else {
+    } catch (error) {
+      console.error('Error checking admin status:', error);
       setIsAdmin(false);
     }
   };
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
-      // Check if using mock authentication for development
-      const useMockAuth = process.env.REACT_APP_USE_MOCK_AUTH === 'true';
-      const mockAdminEmail = process.env.REACT_APP_ADMIN_EMAIL;
-      const mockAdminPassword = process.env.REACT_APP_ADMIN_PASSWORD;
-
-      console.log('Login attempt:', {
-        email,
-        useMockAuth,
-        mockAdminEmail,
-        mockAdminPassword,
-        envVars: process.env
-      });
-
-      if (useMockAuth && mockAdminEmail && mockAdminPassword) {
-        // Mock authentication mode
-        console.log('Checking mock auth:', { email, mockAdminEmail, password, mockAdminPassword });
-        if (email === mockAdminEmail && password === mockAdminPassword) {
-          // Create a mock user object
-          const mockUser = {
-            email: mockAdminEmail,
-            uid: 'mock-admin-user',
-            displayName: 'Admin User',
-          } as any;
-
-          setCurrentUser(mockUser);
-          setIsAdmin(true);
-          console.log('Admin logged in successfully (mock mode)');
-          return;
-        } else {
-          throw new Error('Invalid email or password');
-        }
-      }
-
-      // Real Firebase authentication
       if (!auth) {
-        throw new Error('Firebase Authentication not available. Please configure Firebase credentials.');
+        throw new Error('Firebase Authentication not configured. Please check your Firebase settings.');
       }
+
+      // Authenticate user with Firebase
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      // Check if user is admin
-      if (adminEmail && userCredential.user.email !== adminEmail) {
+      if (!user.email) {
         await signOut(auth);
-        throw new Error('Access denied. Admin privileges required.');
+        throw new Error('User email not found.');
       }
 
-      console.log('Admin logged in successfully');
+      // Verify user is in admins collection and is active
+      try {
+        console.log('🔍 Checking admin status for email:', user.email);
+        const adminDoc = await getDoc(doc(db, 'admins', user.email));
+
+        console.log('📄 Admin document exists:', adminDoc.exists());
+
+        if (!adminDoc.exists()) {
+          console.log('❌ Document not found. Email:', user.email);
+          await signOut(auth);
+          throw new Error(`Access denied. Email "${user.email}" is not authorized as an admin.`);
+        }
+
+        const adminData = adminDoc.data();
+        console.log('✅ Admin document data:', adminData);
+
+        if (adminData.active !== true) {
+          console.log('❌ Admin account inactive. Active flag:', adminData.active);
+          await signOut(auth);
+          throw new Error('Access denied. Your admin account is inactive.');
+        }
+
+        // All checks passed, user is authenticated and authorized
+        setCurrentUser(user);
+        setIsAdmin(true);
+        console.log('✅ Admin logged in successfully');
+      } catch (firestoreError: any) {
+        // If it's our authorization error, rethrow it
+        if (firestoreError.message.includes('Access denied') || firestoreError.message.includes('not authorized')) {
+          throw firestoreError;
+        }
+        // If it's a Firestore error, provide context
+        console.error('🔥 Firestore error:', firestoreError);
+        await signOut(auth);
+        throw new Error(`Failed to verify admin status: ${firestoreError.message}`);
+      }
     } catch (error) {
       const authError = error as any;
       console.error('Login error:', authError.message);
@@ -120,22 +118,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async (): Promise<void> => {
     try {
-      // Check if using mock authentication
-      const useMockAuth = process.env.REACT_APP_USE_MOCK_AUTH === 'true';
-
-      if (useMockAuth) {
-        // Clear mock user
-        setCurrentUser(null);
-        setIsAdmin(false);
-        console.log('Admin logged out successfully (mock mode)');
-        return;
-      }
-
       if (!auth) {
-        console.warn('Firebase Authentication not available');
+        console.warn('Firebase Authentication not configured');
         return;
       }
+
       await signOut(auth);
+      setCurrentUser(null);
+      setIsAdmin(false);
       console.log('Admin logged out successfully');
     } catch (error) {
       const authError = error as AuthError;
@@ -145,12 +135,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    // If auth is not available, set loading to false and allow access for development
     if (!auth) {
-      console.warn('Firebase Auth not initialized - running in development mode');
+      console.warn('Firebase Auth not initialized');
       setLoading(false);
-      // For development, allow access without authentication
-      setIsAdmin(true);
       return;
     }
 
@@ -161,7 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
 
     return unsubscribe;
-  }, [adminEmail]);
+  }, []);
 
   const value: AuthContextType = {
     currentUser,

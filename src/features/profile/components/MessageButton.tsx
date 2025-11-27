@@ -120,33 +120,52 @@ const MessageButton: React.FC<MessageButtonProps> = ({
 
           console.log('✅ Friend request sent from athlete to athlete');
         }
-      } else if (currentUserRole === 'organization' || (currentUserRole === 'athlete' && targetUserRole === 'organization')) {
-        // Handle organization-to-athlete connections
-        if (currentUserRole === 'organization') {
-          // Organization initiating connection to athlete
-          await organizationConnectionService.sendConnectionRequest({
-            organizationId: currentUser.uid,
-            organizationName: currentUser.displayName || 'Unknown Organization',
-            athleteId: targetUserId,
-            athleteName: targetUserName,
-            athletePhotoURL: currentUser.photoURL || '',
-            requestedByUserId: currentUser.uid
-          });
+      } else if (currentUserRole === 'organization' && targetUserRole === 'athlete') {
+        // Organization initiating connection to athlete (peer-to-peer)
+        await organizationConnectionService.sendConnectionRequest({
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || 'Unknown Organization',
+          senderPhotoURL: currentUser.photoURL || '',
+          senderRole: 'organization',
+          recipientId: targetUserId,
+          recipientName: targetUserName,
+          recipientPhotoURL: '',
+          recipientRole: 'athlete',
+          connectionType: 'org_to_athlete'
+        });
 
-          console.log('✅ Connection request sent from organization');
-        } else {
-          // Athlete initiating connection to organization
-          await organizationConnectionService.sendConnectionRequest({
-            organizationId: targetUserId,
-            organizationName: targetUserName,
-            athleteId: currentUser.uid,
-            athleteName: currentUser.displayName || 'Unknown Athlete',
-            athletePhotoURL: currentUser.photoURL || '',
-            requestedByUserId: currentUser.uid
-          });
+        console.log('✅ Connection request sent from organization to athlete');
+      } else if (currentUserRole === 'athlete' && targetUserRole === 'organization') {
+        // Athlete to organization: Use regular friend request system
+        const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
 
-          console.log('✅ Connection request sent from athlete');
-        }
+        await addDoc(collection(db, 'friendRequests'), {
+          requesterId: currentUser.uid,
+          requesterName: currentUser.displayName || 'Unknown Athlete',
+          requesterPhotoURL: currentUser.photoURL || '',
+          recipientId: targetUserId,
+          recipientName: targetUserName,
+          status: 'pending',
+          timestamp: serverTimestamp(),
+          message: `${currentUser.displayName || 'An athlete'} wants to connect with you`
+        });
+
+        console.log('✅ Connection request sent from athlete to organization');
+      } else if (currentUserRole === 'coach' && targetUserRole === 'organization') {
+        // Coach initiating connection to organization (peer-to-peer)
+        await organizationConnectionService.sendConnectionRequest({
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || 'Unknown Coach',
+          senderPhotoURL: currentUser.photoURL || '',
+          senderRole: 'coach',
+          recipientId: targetUserId,
+          recipientName: targetUserName,
+          recipientPhotoURL: '',
+          recipientRole: 'organization',
+          connectionType: 'coach_to_org'
+        });
+
+        console.log('✅ Connection request sent from coach to organization');
       } else {
         // Generic connection request for other role combinations
         const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
@@ -197,7 +216,7 @@ const MessageButton: React.FC<MessageButtonProps> = ({
         <button
           className="profile-action-btn pending-btn"
           disabled={true}
-          title="Connection request pending admin approval"
+          title="Waiting for their response to your connection request"
         >
           <Loader size={18} className="spinning" />
           Request Pending

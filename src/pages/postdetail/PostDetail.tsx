@@ -3,21 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePostInteractions } from '../../hooks/usePostInteractions';
 import { db } from '../../lib/firebase';
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
-import { Heart, MessageCircle, ArrowLeft, Video, Send, Trash2, Share2, CheckCircle, AlertCircle } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { Heart, MessageCircle, ArrowLeft, Video, Share2, CheckCircle, AlertCircle } from 'lucide-react';
 import ThemeToggle from '../../components/common/ui/ThemeToggle';
 import LanguageSelector from '../../components/common/forms/LanguageSelector';
 import VideoPlayer from '../../components/common/media/VideoPlayer';
 import LazyImage from '../../components/common/ui/LazyImage';
-import SafeImage from '../../components/common/SafeImage';
-import notificationService from '../../services/notificationService';
-import { filterChatMessage, getChatViolationMessage, logChatViolation } from '../../utils/content/chatFilter';
 import FooterNav from '../../components/layout/FooterNav';
 import { LoadingFallback } from '../../utils/performance/lazyLoading';
+import CommentSection from '../../components/common/comments/CommentSection';
+import notificationService from '../../services/notificationService';
 import './PostDetail.css';
-import { cleanupPostComments } from '../../utils/data/cleanupPosts';
-import { SafeCommentsList } from '../../components/common/safety/SafeComment';
-import type { Post, Comment, Like, ShareData } from '../../types/models';
+import { updateDoc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import type { Post, Like, ShareData } from '../../types/models';
 
 // Lazy-loaded components
 const ShareModal = lazy(() => import('../../components/common/modals/ShareModal'));
@@ -34,15 +32,12 @@ export default function PostDetail(): React.JSX.Element {
   const { currentUser, isGuest } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [newComment, setNewComment] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isLiking, setIsLiking] = useState<boolean>(false);
-  const [isCommenting, setIsCommenting] = useState<boolean>(false);
-  const [isDeletingComment, setIsDeletingComment] = useState<number | null>(null);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [shareNotification, setShareNotification] = useState<ShareNotification | null>(null);
   const [engagementError, setEngagementError] = useState<string | null>(null);
-  
+
   // Initialize post interactions hook for sharing functionality
   const {
     sharePost,
@@ -66,51 +61,23 @@ export default function PostDetail(): React.JSX.Element {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('📱 Loading post:', postId);
-      
-      // Clean up corrupted comments for this specific post
-      await cleanupPostComments(postId);
-      
+
       const postDoc = await getDoc(doc(db, 'posts', postId));
-      
+
       if (postDoc.exists()) {
         const postData = { id: postDoc.id, ...postDoc.data() } as Post;
-        
-        // Clean up comment objects to prevent React error #31
-        if (postData.comments && Array.isArray(postData.comments)) {
-          postData.comments = postData.comments.map((comment: any) => {
-            if (typeof comment === 'object' && comment !== null) {
-              const { postId: _, ...cleanComment } = comment; // Remove postId field
-              return {
-                text: String(cleanComment.text || ''),
-                userId: String(cleanComment.userId || ''),
-                userDisplayName: String(cleanComment.userDisplayName || 'Unknown User'),
-                userPhotoURL: String(cleanComment.userPhotoURL || ''),
-                timestamp: cleanComment.timestamp || null
-              } as Comment;
-            }
-            return comment;
-          });
-        }
 
-        // Ensure accurate engagement counts are calculated
+        // Ensure accurate engagement counts
         const likes = postData.likes || [];
-        const comments = postData.comments || [];
         const shares = postData.shares || [];
 
         postData.likesCount = likes.length;
-        postData.commentsCount = comments.length;
         postData.sharesCount = postData.sharesCount || shares.length;
-        
+
         console.log('📱 Post loaded:', postData);
-        
-        // Debug media URLs
-        console.log('📱 Media URLs:', {
-          mediaUrl: postData.mediaUrl,
-          mediaType: postData.mediaType
-        });
-        
+
         setPost(postData);
       } else {
         console.error('❌ Post not found:', postId);
@@ -215,102 +182,6 @@ export default function PostDetail(): React.JSX.Element {
     }
   };
 
-  const handleCommentSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault();
-    const commentText = newComment.trim();
-    
-    if (!commentText || !currentUser || isCommenting || !post) return;
-
-    setIsCommenting(true);
-
-    // Prevent guests from commenting
-    if (isGuest()) {
-      setIsCommenting(false);
-      if (window.confirm('Please sign up or log in to comment on posts.\n\nWould you like to go to the login page?')) {
-        navigate('/login');
-      }
-      return;
-    }
-
-    // Content filtering for comments
-    const filterResult = filterChatMessage(commentText);
-    
-    if (!filterResult.isClean) {
-      const violationMessage = getChatViolationMessage(filterResult.violations, filterResult.categories);
-      
-      // Log the violation
-      await logChatViolation(currentUser.uid, commentText, filterResult.violations, 'comment');
-      
-      // Show user-friendly error message
-      alert(`You can't post this comment.\n\n${violationMessage}\n\nTip: Share positive sports content, training updates, or encouraging messages!`);
-      setIsCommenting(false);
-      return;
-    }
-
-    // Store original state for error rollback
-    const originalPost = { ...post };
-
-    try {
-      const commentData: Comment = {
-        id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        text: commentText,
-        userId: currentUser.uid,
-        userDisplayName: currentUser.displayName || 'Anonymous User',
-        userPhotoURL: currentUser.photoURL || '',
-        timestamp: Timestamp.now(),
-        likes: []
-      };
-
-      // Optimistic update - add comment to local state immediately
-      const updatedComments = [...(post.comments || []), commentData];
-      setPost(prev => prev ? ({
-        ...prev,
-        comments: updatedComments,
-        commentsCount: updatedComments.length
-      }) : null);
-
-      // Clear input immediately for better UX
-      setNewComment('');
-
-      // Update post's comment array in database
-      const postRef = doc(db, 'posts', post.id);
-      await updateDoc(postRef, {
-        comments: arrayUnion(commentData),
-        commentsCount: updatedComments.length
-      });
-
-      // Send notification to post owner (only if commenting on someone else's post)
-      if (post.userId && post.userId !== currentUser.uid) {
-        try {
-          console.log('🔔 Sending comment notification to:', post.userId);
-          await notificationService.sendCommentNotification(
-            currentUser.uid,
-            currentUser.displayName || 'Someone',
-            currentUser.photoURL || '',
-            post.userId,
-            post.id,
-            commentText,
-            post
-          );
-        } catch (notificationError) {
-          console.error('Error sending comment notification:', notificationError);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      
-      // Rollback optimistic update on error
-      setPost(originalPost);
-      setNewComment(commentText); // Restore the comment text
-      
-      // Show user-friendly error message
-      setEngagementError('Failed to add comment. Please try again.');
-      setTimeout(() => setEngagementError(null), 5000);
-    } finally {
-      setIsCommenting(false);
-    }
-  };
 
   // Handle share button click
   const handleShare = useCallback(() => {
@@ -384,54 +255,6 @@ export default function PostDetail(): React.JSX.Element {
     setShowShareModal(false);
   }, []);
 
-  const handleDeleteComment = async (commentIndex: number): Promise<void> => {
-    if (!currentUser || !post || isDeletingComment === commentIndex) return;
-
-    const commentToDelete = post.comments?.[commentIndex];
-    
-    if (!commentToDelete) return;
-
-    // Only allow users to delete their own comments
-    if (commentToDelete.userId !== currentUser.uid) {
-      setEngagementError('You can only delete your own comments');
-      setTimeout(() => setEngagementError(null), 3000);
-      return;
-    }
-
-    setIsDeletingComment(commentIndex);
-    
-    // Store original state for error rollback
-    const originalPost = { ...post };
-
-    try {
-      // Optimistic update - remove comment from local state immediately
-      const updatedComments = post.comments?.filter((_, index) => index !== commentIndex) || [];
-      setPost(prev => prev ? ({
-        ...prev,
-        comments: updatedComments,
-        commentsCount: updatedComments.length
-      }) : null);
-
-      // Update database
-      const postRef = doc(db, 'posts', post.id);
-      await updateDoc(postRef, {
-        comments: arrayRemove(commentToDelete),
-        commentsCount: updatedComments.length
-      });
-
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-      
-      // Rollback optimistic update on error
-      setPost(originalPost);
-      
-      // Show user-friendly error message
-      setEngagementError('Failed to delete comment. Please try again.');
-      setTimeout(() => setEngagementError(null), 5000);
-    } finally {
-      setIsDeletingComment(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -501,7 +324,7 @@ export default function PostDetail(): React.JSX.Element {
 
   // Calculate accurate engagement counts
   const likesCount = effectiveLikes.length;
-  const commentsCount = post.comments?.length || 0;
+  const commentsCount = post.commentsCount || 0;
   const sharesCount = post.sharesCount || post.shares?.length || 0;
 
   const formatTimestamp = (timestamp: any): string => {
@@ -676,56 +499,12 @@ export default function PostDetail(): React.JSX.Element {
               </div>
             )}
 
-            {/* Comments Section */}
-            <div className="comments-section">
-              {/* Safe Comments List */}
-              <SafeCommentsList
-                comments={post.comments || []}
-                currentUserId={currentUser?.uid}
-                onDelete={(index: number) => handleDeleteComment(index)}
-                context={`post-detail-${post.id}`}
-                emptyMessage="No comments yet. Be the first to comment!"
-              />
-
-              {/* Add Comment Form */}
-              {!isGuest() ? (
-                <form 
-                  className="comment-form"
-                  onSubmit={handleCommentSubmit}
-                >
-                  <div className="comment-input-container">
-                    <SafeImage 
-                      src={currentUser?.photoURL || ''} 
-                      alt="Your avatar"
-                      placeholder="avatar"
-                      className="comment-avatar"
-                      width={32}
-                      height={32}
-                      style={{ borderRadius: '50%' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Add a comment..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="comment-input"
-                      disabled={isCommenting}
-                    />
-                    <button 
-                      type="submit"
-                      className="comment-submit-btn"
-                      disabled={!newComment.trim() || isCommenting}
-                    >
-                      <Send size={16} />
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="guest-comment-message">
-                  <span>Sign in to comment on posts</span>
-                </div>
-              )}
-            </div>
+            {/* Comments Section - Using Centralized Comment System */}
+            <CommentSection
+              contentId={post.id}
+              contentType="post"
+              className="post-comments"
+            />
           </div>
         </div>
       </div>

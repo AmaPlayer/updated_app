@@ -4,15 +4,24 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || 'AIzaSyBAtDdjjEXyxJ0fnXZ8w8UFPsjHq-pL1Rg',
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || 'amaplay007.firebaseapp.com',
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || 'amaplay007',
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || 'amaplay007.firebasestorage.app',
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || '750642822137',
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || '1:750642822137:web:0b0128bfa8845b850fdb28'
 };
 
-// Debug: Log if environment variables are loaded
+// Debug: Log environment variables (sensitive data - remove in production)
+console.log('=== Firebase Configuration Debug ===');
+console.log('API Key loaded:', !!firebaseConfig.apiKey, firebaseConfig.apiKey?.substring(0, 20) + '...');
+console.log('Auth Domain:', firebaseConfig.authDomain);
+console.log('Project ID:', firebaseConfig.projectId);
+console.log('Storage Bucket:', firebaseConfig.storageBucket);
+console.log('Messaging Sender ID:', firebaseConfig.messagingSenderId);
+console.log('App ID:', firebaseConfig.appId);
+console.log('=====================================');
+
 if (!firebaseConfig.apiKey) {
   console.warn('Firebase API Key not found in environment variables. Please add REACT_APP_FIREBASE_API_KEY to .env file.');
 }

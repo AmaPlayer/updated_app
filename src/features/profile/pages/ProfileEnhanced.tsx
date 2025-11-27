@@ -310,6 +310,33 @@ const ProfileEnhanced: React.FC = () => {
     setIsPhysicalAttributesModalOpen(false);
   };
 
+  // Handler for organization info modal
+  const handleSaveOrganizationInfo = async (updatedPersonalDetails: PersonalDetails) => {
+    setProfileState(prev => ({
+      ...prev,
+      personalDetails: updatedPersonalDetails
+    }));
+
+    // Save to Firebase
+    if (currentUser) {
+      try {
+        await userService.updateUserProfile(currentUser.uid, {
+          organizationName: updatedPersonalDetails.organizationName,
+          organizationType: updatedPersonalDetails.organizationType,
+          location: updatedPersonalDetails.location,
+          contactEmail: updatedPersonalDetails.contactEmail,
+          website: updatedPersonalDetails.website
+        } as any);
+        console.log('✅ Organization info saved to Firebase');
+      } catch (error) {
+        console.error('❌ Error saving organization info to Firebase:', error);
+      }
+    }
+
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new CustomEvent('userProfileUpdated'));
+  };
+
   // Handler for achievements section modal
   const handleSaveAchievements = async (updatedAchievements: Achievement[]) => {
     setProfileState(prev => ({
@@ -727,6 +754,7 @@ const ProfileEnhanced: React.FC = () => {
         personalDetails={profileState.personalDetails}
         isOwner={true} // TODO: Determine ownership based on current user vs profile user
         onEditProfile={handleEditProfile}
+        onSaveOrganizationInfo={handleSaveOrganizationInfo}
         onAddAthlete={handleAddAthlete}
       />
 

@@ -285,12 +285,19 @@ export class UserManagementService {
    */
   async getAllUsers(): Promise<User[]> {
     try {
+      console.log('📊 Fetching all users from Firebase...');
+      console.log('📊 Database reference (db):', db);
+
       const usersRef = collection(db, 'users');
+      console.log('📊 Users collection reference created:', usersRef);
+
       const querySnapshot = await getDocs(usersRef);
+      console.log('📊 Query snapshot received. Total documents:', querySnapshot.size);
 
       const users: User[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        console.log('📊 Processing user:', data.displayName || data.email);
         users.push({
           uid: doc.id,
           id: doc.id,
@@ -315,9 +322,11 @@ export class UserManagementService {
         } as User);
       });
 
+      console.log('📊 Successfully fetched', users.length, 'users from Firebase');
       return users;
     } catch (error) {
-      console.error('Error getting all users from Firebase:', error);
+      console.error('❌ Error getting all users from Firebase:', error);
+      console.error('Error type:', error instanceof Error ? error.message : 'Unknown error');
       return [];
     }
   }

@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Video, Send, Trash2, MoreVertical, Edit3, Share2, Check } from 'lucide-react';
+import { Heart, MessageCircle, Video, Trash2, MoreVertical, Edit3, Share2, Check } from 'lucide-react';
+import { doc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { db } from '../../../lib/firebase';
 import OptimizedImage from '../../../components/common/media/OptimizedImage';
 import VideoPlayer from '../../../components/common/media/VideoPlayer';
 import LazyImage from '../../../components/common/ui/LazyImage';
 import LazyLoadImage from '../../../components/common/media/LazyLoadImage';
 import SafeImage from '../../../components/common/SafeImage';
 import ErrorBoundary from '../../../components/common/safety/ErrorBoundary';
-import { SafeCommentsList } from '../../../components/common/safety/SafeComment';
+import CommentSection from '../../../components/common/comments/CommentSection';
 import RoleBadge from '../../../components/common/ui/RoleBadge';
 import SportBanner from '../../../features/profile/components/SportBanner';
 import { Post as PostType, Like } from '../../../types/models';
 import { User } from 'firebase/auth';
 import userService from '../../../services/api/userService';
 import './Post.css';
-
-interface CommentForms {
-  newComment: Record<string, string>;
-}
 
 interface PostProps {
   post: PostType;
@@ -27,7 +25,6 @@ interface PostProps {
   editingPost: string | null;
   editText: string;
   shareSuccess: Record<string, boolean>;
-  forms: CommentForms;
   onLike: (postId: string, likes: string[], isSample: boolean, post: PostType) => void;
   onToggleComments: (postId: string) => void;
   onTogglePostMenu: (postId: string) => void;
@@ -36,11 +33,6 @@ interface PostProps {
   onCancelEdit: () => void;
   onSharePost: (postId: string, post: PostType) => void;
   onDeletePost: (postId: string, post: PostType) => void;
-  onCommentSubmit: (postId: string, commentText: string) => void;
-  onDeleteComment: (postId: string, index: number) => void;
-  onEditComment: (postId: string, index: number, newText: string) => void;
-  onLikeComment: (postId: string, index: number) => void;
-  onSetNewComment: (postId: string, text: string) => void;
   onSetEditText: (text: string) => void;
   onNavigateToPost?: (postId: string) => void;
   onUserClick?: (userId: string) => void;
@@ -61,7 +53,6 @@ const Post: React.FC<PostProps> = ({
   editingPost,
   editText,
   shareSuccess,
-  forms,
   onLike,
   onToggleComments,
   onTogglePostMenu,
@@ -70,11 +61,6 @@ const Post: React.FC<PostProps> = ({
   onCancelEdit,
   onSharePost,
   onDeletePost,
-  onCommentSubmit,
-  onDeleteComment,
-  onEditComment,
-  onLikeComment,
-  onSetNewComment,
   onSetEditText,
   onNavigateToPost,
   onUserClick
@@ -103,9 +89,12 @@ const Post: React.FC<PostProps> = ({
 
   // Check if this is the current user's post
   const isCurrentUserPost = currentUser && post.userId === currentUser.uid;
-  
+
   // State to track user profile data from Firebase
   const [userProfileData, setUserProfileData] = useState<any>(null);
+
+  // State to track real-time comment count from Firestore
+  const [realtimeCommentCount, setRealtimeCommentCount] = useState<number>(post.commentsCount || 0);
 
   // Helper function to safely extract string value from object or string
   const getStringValue = (value: any): string | null => {
@@ -181,6 +170,42 @@ const Post: React.FC<PostProps> = ({
       window.removeEventListener('userProfileUpdated', handleProfileUpdate as EventListener);
     };
   }, [isCurrentUserPost, currentUser]);
+
+  // Real-time listener for comment count from Firestore
+  useEffect(() => {
+    if (!post.id) return;
+
+    let unsubscribe: Unsubscribe | null = null;
+
+    try {
+      // Subscribe to real-time updates of the post document
+      unsubscribe = onSnapshot(
+        doc(db, 'posts', post.id),
+        (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data();
+            // Update comment count from Firestore commentsCount field
+            setRealtimeCommentCount(data.commentsCount || 0);
+          }
+        },
+        (error) => {
+          console.error('Error listening to post updates:', error);
+          // Fallback to initial value if listener fails
+          setRealtimeCommentCount(post.commentsCount || 0);
+        }
+      );
+    } catch (error) {
+      console.error('Error setting up comment count listener:', error);
+      setRealtimeCommentCount(post.commentsCount || 0);
+    }
+
+    // Cleanup listener on unmount
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [post.id]);
 
   // Get current profile data - use Firebase data for current user, post data for others
   // Always extract string values to prevent [object Object] display
@@ -454,7 +479,7 @@ const Post: React.FC<PostProps> = ({
           className={showComments[post.id] ? 'active' : ''}
         >
           <MessageCircle size={20} />
-          <span>{post.comments?.length || 0}</span>
+          <span>{realtimeCommentCount}</span>
         </button>
 
         {/* Media type indicator */}
@@ -519,74 +544,14 @@ const Post: React.FC<PostProps> = ({
           </div>
         )}
 
-      {/* Comments Section */}
+      {/* Comments Section - Using Centralized Real-Time System */}
       <ErrorBoundary name={`Post Comments for post ${post.id}`}>
         {showComments[post.id] && post.id && (
-          <div className="comments-section">
-            {/* Safe Comments List */}
-            <SafeCommentsList
-              comments={post.comments || []}
-              currentUserId={currentUser?.uid}
-              onDelete={(index) => onDeleteComment(post.id, index)}
-              onEdit={(index, commentId, newText) => onEditComment(post.id, index, newText)}
-              onLike={(index) => onLikeComment(post.id, index)}
-              context={`post-${post.id}`}
-              emptyMessage="No comments yet. Be the first to comment!"
-            />
-
-            {/* Add Comment Form */}
-            {!isGuest ? (
-              <form
-                className="comment-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const commentText = forms.newComment[post.id] || '';
-                  if (commentText.trim()) {
-                    onCommentSubmit(post.id, commentText);
-                  }
-                }}
-              >
-                <div
-                  className="comment-input-container"
-                  onClick={() => {
-                    const input = document.querySelector(`input[data-post-id="${post.id}"]`);
-                    if (input) (input as HTMLInputElement).focus();
-                  }}
-                >
-                  <SafeImage
-                    src={currentUser?.photoURL || ''}
-                    alt="Your avatar"
-                    placeholder="avatar"
-                    className="comment-avatar"
-                    width={32}
-                    height={32}
-                    style={{ borderRadius: '50%' }}
-                    threshold={0.2}
-                    rootMargin="50px"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Add a comment..."
-                    value={forms.newComment[post.id] || ''}
-                    onChange={(e) => onSetNewComment(post.id, e.target.value)}
-                    className="comment-input"
-                    data-post-id={post.id}
-                  />
-                  <button
-                    type="submit"
-                    className="comment-submit-btn"
-                    disabled={!forms.newComment[post.id]?.trim()}
-                  >
-                    <Send size={16} />
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="guest-comment-message">
-                <span>Sign in to comment on posts</span>
-              </div>
-            )}
-          </div>
+          <CommentSection
+            contentId={post.id}
+            contentType="post"
+            className="feed-post-comments"
+          />
         )}
       </ErrorBoundary>
     </div>

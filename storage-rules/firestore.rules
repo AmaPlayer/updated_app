@@ -68,12 +68,13 @@ service cloud.firestore {
     }
     
     function validateCommentData() {
-      return request.resource.data.keys().hasAll(['text', 'userId', 'userDisplayName', 'timestamp', 'postId'])
+      return request.resource.data.keys().hasAll(['text', 'userId', 'userDisplayName', 'timestamp', 'contentId', 'contentType'])
         && request.resource.data.text is string
         && request.resource.data.text.size() <= 500
         && request.resource.data.userId is string
         && request.resource.data.userDisplayName is string
-        && request.resource.data.postId is string
+        && request.resource.data.contentId is string
+        && request.resource.data.contentType in ['post', 'story', 'moment']
         && request.resource.data.userId == request.auth.uid;
     }
     
@@ -221,14 +222,14 @@ service cloud.firestore {
         && request.resource.data.timestamp != null;
     }
     
-    // Admin user check - in production, this should check against admin roles in users collection
+    // Admin user check - checks for admin role in admins collection
     function isAdminUser() {
-      // For demo purposes, check if user has admin in email
-      // In production, you would check a custom claim or admin role in the users collection
-      return request.auth != null 
-        && request.auth.token.email != null 
-        && (request.auth.token.email.matches('.*admin.*') || 
-            request.auth.token.email.matches('.*moderator.*'));
+      // Check if user has admin role in the admins collection
+      // This checks both that the admin document exists and that it's active
+      let adminDoc = get(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return request.auth != null &&
+        adminDoc.data.active == true &&
+        adminDoc.data.role in ['super_admin', 'admin', 'moderator', 'content_moderator'];
     }
     
     // Stories collection rules
@@ -521,23 +522,21 @@ service cloud.firestore {
     }
     
     // Admin collection rules - for admin user management
-    match /admins/{adminId} {
-      // Only admins can read admin documents
+    // Document ID is the admin email address
+    match /admins/{adminEmail} {
+      // Allow users to read their own admin document to verify their admin status
       allow read: if request.auth != null && (
-        isAdminUser() || 
-        request.auth.uid == adminId
-      );
-      
-      // Allow admin creation for specific admin email
-      allow create: if request.auth != null && (
-        request.auth.token.email == 'admin@amaplayer.com' ||
+        request.auth.token.email == adminEmail ||
         isAdminUser()
       );
-      
-      // Only super admins can update admin documents
+
+      // Allow admin creation for authenticated admins only
+      allow create: if request.auth != null && isAdminUser();
+
+      // Only admins can update admin documents
       allow update: if request.auth != null && isAdminUser();
-      
-      // Only super admins can delete admin documents
+
+      // Only admins can delete admin documents
       allow delete: if request.auth != null && isAdminUser();
     }
     
@@ -675,7 +674,59 @@ service cloud.firestore {
              affectedKeys.hasOnly(['updatedAt']);
     }
 
-    // Organization Connection Requests collection - for admin approval of org-athlete connections
+    // Organization Connections collection - NEW peer-to-peer model (replaces old organizationConnectionRequests)
+    // Supports org→athlete and coach→organization connections without admin approval
+    match /organizationConnections/{connectionId} {
+      // Admins can read all documents; regular users can only read their own connections
+      allow read: if request.auth != null && (
+        isAdminUser() ||  // Admins can read everything
+        request.auth.uid == resource.data.senderId ||  // Senders can read
+        request.auth.uid == resource.data.recipientId  // Recipients can read
+      );
+
+      // Only senders can create new connections
+      allow create: if request.auth != null
+        && !isGuestUser()
+        && request.auth.uid == request.resource.data.senderId
+        && validateNewOrgConnectionData();
+
+      // Only recipients can accept/reject (update status and add response timestamps)
+      // Senders can cancel pending requests
+      allow update: if request.auth != null && !isGuestUser() && (
+        // Recipient accepting/rejecting connection
+        (request.auth.uid == resource.data.recipientId &&
+         request.resource.data.status in ['accepted', 'rejected'] &&
+         resource.data.status == 'pending') ||
+        // Sender canceling pending connection
+        (request.auth.uid == resource.data.senderId &&
+         request.resource.data.status == 'rejected' &&
+         resource.data.status == 'pending')
+      );
+
+      // Only recipients or senders can delete their own connections
+      allow delete: if request.auth != null
+        && !isGuestUser()
+        && (request.auth.uid == resource.data.senderId ||
+            request.auth.uid == resource.data.recipientId);
+    }
+
+    // Connection Activity collection - for audit trail and admin analytics
+    match /connectionActivity/{activityId} {
+      // Sender, recipient, and admins can read activity logs
+      allow read: if request.auth != null && (
+        isAdminUser() ||
+        request.auth.uid == resource.data.senderId ||
+        request.auth.uid == resource.data.recipientId
+      );
+
+      // System or service can create activity logs (authenticated users)
+      allow create: if request.auth != null && validateConnectionActivityData();
+
+      // Activity logs are immutable - no updates or deletes
+      allow update, delete: if false;
+    }
+
+    // Organization Connection Requests collection - OLD model (for backward compatibility during migration)
     match /organizationConnectionRequests/{requestId} {
       // Admins can read all requests; users can read requests involving them
       allow read: if request.auth != null && (
@@ -685,7 +736,7 @@ service cloud.firestore {
       );
 
       // Authenticated users can create requests, but only admins can update/delete
-      allow create: if request.auth != null && !isGuestUser() && validateOrgConnectionData();
+      allow create: if request.auth != null && !isGuestUser() && validateOldOrgConnectionData();
 
       // Only admins can update connection requests (approve/reject)
       allow update: if request.auth != null && isAdminUser();
@@ -700,7 +751,35 @@ service cloud.firestore {
       allow read, write: if request.auth != null && isAdminUser();
     }
 
-    function validateOrgConnectionData() {
+    function validateNewOrgConnectionData() {
+      return request.resource.data.keys().hasAll(['senderId', 'senderName', 'senderRole', 'recipientId', 'recipientName', 'recipientRole', 'connectionType', 'status', 'createdAt', 'createdViaConnection'])
+        && request.resource.data.senderId is string
+        && request.resource.data.senderName is string
+        && request.resource.data.senderRole in ['organization', 'coach']
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientName is string
+        && request.resource.data.recipientRole in ['athlete', 'organization']
+        && request.resource.data.connectionType in ['org_to_athlete', 'coach_to_org']
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdViaConnection == true
+        && request.resource.data.senderId == request.auth.uid;
+    }
+
+    function validateConnectionActivityData() {
+      return request.resource.data.keys().hasAll(['connectionId', 'connectionType', 'action', 'actionDate', 'performedByUserId', 'performedByName', 'senderId', 'senderName', 'recipientId', 'recipientName'])
+        && request.resource.data.connectionId is string
+        && request.resource.data.connectionType in ['org_to_athlete', 'coach_to_org']
+        && request.resource.data.action in ['request_sent', 'request_accepted', 'request_rejected', 'request_cancelled', 'message_sent', 'call_initiated']
+        && request.resource.data.actionDate != null
+        && request.resource.data.performedByUserId is string
+        && request.resource.data.performedByName is string
+        && request.resource.data.senderId is string
+        && request.resource.data.senderName is string
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientName is string;
+    }
+
+    function validateOldOrgConnectionData() {
       return request.resource.data.keys().hasAll(['organizationId', 'organizationName', 'athleteId', 'athleteName', 'status', 'requestDate'])
         && request.resource.data.organizationId is string
         && request.resource.data.organizationName is string

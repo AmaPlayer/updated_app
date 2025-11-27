@@ -76,21 +76,18 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Certificate name is required';
-    } else if (formData.name.length > 100) {
+    // Only validate name length if provided
+    if (formData.name.trim() && formData.name.length > 100) {
       newErrors.name = 'Name must be 100 characters or less';
     }
 
-    if (!formData.issuingOrganization.trim()) {
-      newErrors.issuingOrganization = 'Issuing organization is required';
-    } else if (formData.issuingOrganization.length > 100) {
+    // Only validate organization name length if provided
+    if (formData.issuingOrganization.trim() && formData.issuingOrganization.length > 100) {
       newErrors.issuingOrganization = 'Organization name must be 100 characters or less';
     }
 
-    if (!formData.dateIssued) {
-      newErrors.dateIssued = 'Date issued is required';
-    } else {
+    // Only validate date issued if provided
+    if (formData.dateIssued) {
       const issuedDate = new Date(formData.dateIssued);
       const today = new Date();
       if (issuedDate > today) {
@@ -98,7 +95,8 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
       }
     }
 
-    if (formData.expirationDate) {
+    // Only validate expiration date relationship if both dates are provided
+    if (formData.dateIssued && formData.expirationDate) {
       const issuedDate = new Date(formData.dateIssued);
       const expirationDate = new Date(formData.expirationDate);
       if (expirationDate <= issuedDate) {
@@ -106,10 +104,12 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
       }
     }
 
+    // Validate URL only if provided
     if (formData.verificationUrl && !isValidUrl(formData.verificationUrl)) {
       newErrors.verificationUrl = 'Please enter a valid verification URL';
     }
 
+    // Validate URL only if provided
     if (formData.certificateImageUrl && !isValidUrl(formData.certificateImageUrl)) {
       newErrors.certificateImageUrl = 'Please enter a valid image URL';
     }
@@ -200,9 +200,10 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
         <form onSubmit={handleSubmit} className="modal-form" noValidate>
           <div className="form-section">
             <div className="form-group">
-              <label htmlFor="certificate-name" className="form-label required">
+              <label htmlFor="certificate-name" className="form-label">
                 <Award size={16} aria-hidden="true" />
-                Certificate Name
+                Certificate Title / Name
+                <span className="form-label-optional">(Optional)</span>
               </label>
               <input
                 id="certificate-name"
@@ -210,9 +211,8 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
                 className={`form-input ${errors.name ? 'error' : ''}`}
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
-                placeholder="e.g., CPR Certification, First Aid Training"
+                placeholder="e.g., Advanced First Aid, Fitness Instructor Certification, Coaching License"
                 maxLength={100}
-                required
                 aria-describedby={errors.name ? 'name-error' : undefined}
               />
               {errors.name && (
@@ -223,9 +223,10 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="certificate-organization" className="form-label required">
+              <label htmlFor="certificate-organization" className="form-label">
                 <Building size={16} aria-hidden="true" />
-                Issuing Organization
+                Who issued this certificate?
+                <span className="form-label-optional">(Optional)</span>
               </label>
               <input
                 id="certificate-organization"
@@ -235,7 +236,6 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
                 onChange={(e) => handleInputChange('issuingOrganization', e.target.value)}
                 placeholder="e.g., American Red Cross, National Safety Council"
                 maxLength={100}
-                required
                 aria-describedby={errors.issuingOrganization ? 'organization-error' : undefined}
               />
               {errors.issuingOrganization && (
@@ -247,9 +247,10 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
 
             <div className="form-row">
               <div className="form-group">
-                <label htmlFor="certificate-date-issued" className="form-label required">
+                <label htmlFor="certificate-date-issued" className="form-label">
                   <Calendar size={16} aria-hidden="true" />
                   Date Issued
+                  <span className="form-label-optional">(Optional)</span>
                 </label>
                 <input
                   id="certificate-date-issued"
@@ -258,7 +259,6 @@ const CertificateModal: React.FC<CertificateModalProps> = ({
                   value={formData.dateIssued}
                   onChange={(e) => handleInputChange('dateIssued', e.target.value)}
                   max={new Date().toISOString().split('T')[0]}
-                  required
                   aria-describedby={errors.dateIssued ? 'date-issued-error' : undefined}
                 />
                 {errors.dateIssued && (

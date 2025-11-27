@@ -66,6 +66,15 @@ export interface AuthContextValue {
   /** Change the current user's password */
   changePassword: (currentPassword: string, newPassword: string, isSocialUser?: boolean) => Promise<PasswordChangeResult>;
 
+  /** Reauthenticate with Google OAuth (for identity verification) */
+  reauthenticateWithGoogle: () => Promise<User>;
+
+  /** Reauthenticate with Apple OAuth (for identity verification) */
+  reauthenticateWithApple: () => Promise<User>;
+
+  /** Change password with OAuth or email fallback for alternative verification */
+  changePasswordWithOAuthFallback: (newPassword: string, oauthProvider?: string) => Promise<PasswordChangeResult>;
+
   /** Send password reset email to the user */
   resetPassword: (email: string) => Promise<void>;
 

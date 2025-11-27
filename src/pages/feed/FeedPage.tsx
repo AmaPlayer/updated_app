@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useInfiniteScroll } from '../../utils/performance/infiniteScroll';
 import { useDebounce } from '../../utils/performance/optimization';
 import { usePostInteractions } from '../../hooks/usePostInteractions';
+import { useRealtimeEngagementBatch } from '../../hooks/useRealtimeEngagement';
 import { useToast } from '../../hooks/useToast';
 import FeedCard, { TalentCard, ProfileCard } from '../../components/common/feed/FeedCard';
 import ToastContainer from '../../components/common/ui/ToastContainer';
@@ -196,15 +197,35 @@ const FeedPage = memo(() => {
     hasMore: true
   });
 
-  // Memoized filtered items
+  // Real-time engagement tracking for all posts in the feed
+  // This listens to Firestore for updates to engagement counts (likes, comments, shares)
+  const postIds = useMemo(() => items.map(item => item.id), [items]);
+  const { engagement } = useRealtimeEngagementBatch('posts', postIds);
+
+  // Memoized filtered items with real-time engagement data
+  const itemsWithEngagement = useMemo(() => {
+    return items.map(item => {
+      const realtimeData = engagement[item.id];
+      if (realtimeData) {
+        return {
+          ...item,
+          likesCount: realtimeData.likesCount ?? item.likesCount,
+          commentsCount: realtimeData.commentsCount ?? item.commentsCount,
+          sharesCount: realtimeData.sharesCount ?? item.sharesCount
+        };
+      }
+      return item;
+    });
+  }, [items, engagement]);
+
   const filteredItems = useMemo(() => {
-    if (!debouncedSearch) return items;
-    
-    return items.filter(item => 
+    if (!debouncedSearch) return itemsWithEngagement;
+
+    return itemsWithEngagement.filter(item =>
       item.caption?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       item.userDisplayName?.toLowerCase().includes(debouncedSearch.toLowerCase())
     );
-  }, [items, debouncedSearch]);
+  }, [itemsWithEngagement, debouncedSearch]);
 
   // Save scroll position before modal interactions
   const saveScrollPosition = useCallback(() => {
@@ -271,9 +292,7 @@ const FeedPage = memo(() => {
   }, [items, saveScrollPosition]);
 
   const handleCommentAdded = useCallback((itemId: string) => {
-    // This could be enhanced to update the items array with new comment count
-    // For now, we'll rely on the FeedCard's local state management
-    console.log('Comment added to post:', itemId);
+    console.log('✅ Comment added to post:', itemId);
   }, []);
 
   const handleShare = useCallback((itemId: string) => {

@@ -2890,18 +2890,4 @@
   .follow-btn:hover {
     border-width: 3px;
   }
-}/* 
-Clickable user name in friend requests */
-.request-user-name.clickable-name {
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.request-user-name.clickable-name:hover {
-  color: var(--accent-primary, #007bff);
-  text-decoration: underline;
-}
-
-.request-user-name.clickable-name:active {
-  transform: scale(0.98);
 }

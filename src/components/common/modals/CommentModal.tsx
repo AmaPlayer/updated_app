@@ -1,10 +1,11 @@
-// Comment modal for posts with lazy loading
+// Comment modal for posts with lazy loading and real-time updates
 import { memo, useState, useCallback, useEffect, FormEvent } from 'react';
 import { X, Send, Heart, MoreHorizontal, User } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { validateComment, getCharacterCount } from '../../../utils/validation/validation';
 import { handleCommentError, retryWithBackoff } from '../../../utils/error/engagementErrorHandler';
 import { useToast } from '../../../hooks/useToast';
+import { useRealtimeComments } from '../../../hooks/useRealtimeComments';
 import LazyImage from '../ui/LazyImage';
 import LoadingSpinner from '../feedback/LoadingSpinner';
 import ErrorMessage from '../feedback/ErrorMessage';
@@ -21,42 +22,16 @@ interface CommentModalProps {
 const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded }) => {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
-  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState<number>(0);
-  
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Use real-time comments hook for automatic updates
+  const { comments, loading, error: realtimeError, refresh } = useRealtimeComments(post?.id || null);
+
   const MAX_COMMENT_LENGTH = 500;
-
-  // Fetch comments from the post data
-  const fetchComments = useCallback(async (postData: Post): Promise<Comment[]> => {
-    try {
-      // Get fresh post data to ensure we have the latest comments
-      const freshPost = await postsService.getById(postData.id);
-      if (!freshPost) {
-        throw new Error('Post not found');
-      }
-
-      const postComments = (freshPost.comments || []) as Comment[];
-      
-      // Sort comments by newest first (timestamp descending)
-      return postComments.sort((a, b) => {
-        const aTime = a.timestamp && typeof a.timestamp === 'object' && 'seconds' in a.timestamp 
-          ? (a.timestamp as any).seconds * 1000
-          : new Date(a.timestamp as string).getTime();
-        const bTime = b.timestamp && typeof b.timestamp === 'object' && 'seconds' in b.timestamp 
-          ? (b.timestamp as any).seconds * 1000
-          : new Date(b.timestamp as string).getTime();
-        return bTime - aTime;
-      });
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      throw error;
-    }
-  }, []);
 
   const submitComment = useCallback(async (postId: string, text: string): Promise<Comment> => {
     if (!currentUser) {
@@ -99,42 +74,6 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
     return { success: true, liked };
   }, []);
 
-  // Load comments with retry mechanism
-  const loadComments = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const commentsData = await retryWithBackoff(
-        () => fetchComments(post),
-        {
-          maxAttempts: retryCount < 2 ? 3 : 1,
-          baseDelay: 1000,
-          maxDelay: 5000
-        }
-      );
-      
-      setComments(commentsData);
-      setRetryCount(0); // Reset on success
-      
-    } catch (error) {
-      const engagementError = handleCommentError(error, post.id, 'load');
-      setError(engagementError.userMessage);
-      
-      if (engagementError.canRetry) {
-        setRetryCount(prev => prev + 1);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [post, fetchComments, retryCount]);
-
-  // Load comments
-  useEffect(() => {
-    if (post?.id) {
-      loadComments();
-    }
-  }, [post?.id, loadComments]);
 
   // Validate comment input
   const validateCommentInput = useCallback((text: string) => {
@@ -152,12 +91,12 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
   const handleCommentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewComment(value);
-    
+
     // Clear validation error when user starts typing
-    if (validationError && value.trim().length > 0) {
+    if (value.trim().length > 0) {
       setValidationError(null);
     }
-  }, [validationError]);
+  }, []);
 
   // Handle comment submission
   const handleSubmitComment = useCallback(async (e: FormEvent<HTMLFormElement>) => {
@@ -165,7 +104,7 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
     if (submitting || !currentUser) return;
 
     const commentText = newComment.trim();
-    
+
     // Validate comment before submission
     if (!validateCommentInput(commentText)) {
       return;
@@ -173,9 +112,9 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
 
     try {
       setSubmitting(true);
-      setError(null);
+      setLocalError(null);
       setValidationError(null);
-      
+
       const comment = await retryWithBackoff(
         () => submitComment(post.id, commentText),
         {
@@ -184,23 +123,24 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
           maxDelay: 5000
         }
       );
-      
-      // Add comment to local state (sorted by newest first)
-      setComments(prev => [comment, ...prev]);
+
+      // Clear input on success
       setNewComment('');
-      
+
       // Notify parent component about the new comment for counter updates
       onCommentAdded?.(comment);
-      
+
       // Show success feedback
       showToast('Success', 'Comment posted successfully!', {
         type: 'success',
         duration: 3000
       });
-      
+
+      // Real-time listener will handle comment updates automatically via Firebase onSnapshot()
+
     } catch (error) {
       const engagementError = handleCommentError(error, post.id, 'add');
-      
+
       if (engagementError.canRetry) {
         showToast('Comment Failed', engagementError.userMessage, {
           type: 'error',
@@ -216,46 +156,27 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
     } finally {
       setSubmitting(false);
     }
-  }, [newComment, submitting, currentUser, post.id, submitComment, onCommentAdded, validateCommentInput, showToast]);
+  }, [currentUser, post.id, submitComment, onCommentAdded, validateCommentInput, showToast]);
 
   // Handle comment like
   const handleLikeComment = useCallback(async (commentId: string) => {
     const comment = comments.find(c => c.id === commentId);
     if (!comment || !currentUser) return;
-    
+
     // Check if user has already liked this comment
     const userLikes = Array.isArray(comment.likes) ? comment.likes : [];
-    const isCurrentlyLiked = userLikes.some((like: any) => 
+    const isCurrentlyLiked = userLikes.some((like: any) =>
       typeof like === 'string' ? like === currentUser.uid : like.userId === currentUser.uid
     );
-    
+
     const newLiked = !isCurrentlyLiked;
-    const currentLikesCount = comment.likesCount || userLikes.length;
-    
-    // Optimistic update
-    setComments(prev => prev.map(c => 
-      c.id === commentId 
-        ? { 
-            ...c, 
-            likesCount: newLiked ? currentLikesCount + 1 : Math.max(0, currentLikesCount - 1)
-          }
-        : c
-    ));
 
     try {
       await likeComment(commentId, newLiked);
+      // Real-time listener will update the UI automatically via Firebase onSnapshot()
     } catch (error) {
-      // Revert on error
-      setComments(prev => prev.map(c => 
-        c.id === commentId 
-          ? { 
-              ...c, 
-              likesCount: newLiked ? Math.max(0, currentLikesCount - 1) : currentLikesCount + 1
-            }
-          : c
-      ));
       console.error('Error liking comment:', error);
-      setError('Failed to like comment. Please try again.');
+      setLocalError('Failed to like comment. Please try again.');
     }
   }, [comments, likeComment, currentUser]);
 
@@ -316,12 +237,12 @@ const CommentModal = memo<CommentModalProps>(({ post, onClose, onCommentAdded })
 
         {/* Comments List */}
         <div className="comments-container">
-          {error && (
+          {(realtimeError || localError) && (
             <ErrorMessage
-              message={error}
+              message={realtimeError || localError || ''}
               type="error"
-              onDismiss={() => setError(null)}
-              onRetry={loadComments}
+              onDismiss={() => setLocalError(null)}
+              onRetry={refresh}
               retryLabel="Reload Comments"
               className="comment-error"
             />

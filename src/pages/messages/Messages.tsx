@@ -10,19 +10,16 @@ import SendButton from '../../features/messaging/components/SendButton';
 import FriendsList from '../../features/messaging/components/FriendsList';
 import ChatHeader from '../../features/messaging/components/ChatHeader';
 import UserAvatar from '../../components/common/user/UserAvatar';
-import { navigateToProfile } from '../../utils/navigation/profileNavigation';
 import { filterChatMessage, getChatViolationMessage, logChatViolation } from '../../utils/content/chatFilter';
 import notificationService from '../../services/notificationService';
 import './Messages.css';
 
 interface FriendRequest {
   id: string;
-  senderId: string;
-  receiverId: string;
-  senderName: string;
-  senderPhoto: string;
-  receiverName: string;
-  receiverPhoto: string;
+  requesterId: string;
+  recipientId: string;
+  requesterName: string;
+  recipientName: string;
   status: string;
   timestamp: any;
 }
@@ -155,24 +152,49 @@ export default function Messages() {
 
   const fetchFriendRequests = () => {
     if (!currentUser) return;
-    
+
     console.log('📱 Messages: Setting up friend requests listener');
     const q = query(
       collection(db, 'friendRequests'),
-      where('receiverId', '==', currentUser.uid),
+      where('recipientId', '==', currentUser.uid),
       where('status', '==', 'pending')
     );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const requests: FriendRequest[] = [];
-      snapshot.forEach((doc) => {
-        requests.push({ id: doc.id, ...doc.data() } as FriendRequest);
-      });
-      console.log('📱 Messages: Friend requests updated:', requests.length);
-      setFriendRequests(requests);
-    });
 
-    return unsubscribe;
+    // Debounce timeout to prevent rapid updates
+    let updateTimeout: NodeJS.Timeout | null = null;
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        // Clear any pending updates
+        if (updateTimeout) {
+          clearTimeout(updateTimeout);
+        }
+
+        // Debounce the update by 150ms
+        updateTimeout = setTimeout(() => {
+          const requests: FriendRequest[] = [];
+          snapshot.forEach((doc) => {
+            requests.push({ id: doc.id, ...doc.data() } as FriendRequest);
+          });
+          console.log('📱 Messages: Friend requests updated:', requests.length);
+          setFriendRequests(requests);
+        }, 150);
+      },
+      (error) => {
+        console.error('❌ Error in friend requests listener:', error);
+        if (updateTimeout) {
+          clearTimeout(updateTimeout);
+        }
+      }
+    );
+
+    return () => {
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      unsubscribe();
+    };
   };
 
   const fetchFriends = () => {
@@ -276,12 +298,37 @@ export default function Messages() {
       }, 100);
     }
     
-    const unsubscribe1 = onSnapshot(q1, () => updateFriendsList());
-    const unsubscribe2 = onSnapshot(q2, () => updateFriendsList());
-    
+    const unsubscribe1 = onSnapshot(
+      q1,
+      () => {
+        console.log('📱 Messages: Friends listener 1 fired');
+        updateFriendsList();
+      },
+      (error) => {
+        console.error('❌ Error in friends listener 1:', error);
+        if (updateTimeout) {
+          clearTimeout(updateTimeout);
+        }
+      }
+    );
+
+    const unsubscribe2 = onSnapshot(
+      q2,
+      () => {
+        console.log('📱 Messages: Friends listener 2 fired');
+        updateFriendsList();
+      },
+      (error) => {
+        console.error('❌ Error in friends listener 2:', error);
+        if (updateTimeout) {
+          clearTimeout(updateTimeout);
+        }
+      }
+    );
+
     // Update friends list initially
     updateFriendsList();
-    
+
     // Return cleanup function
     return () => {
       if (updateTimeout) {
@@ -294,70 +341,99 @@ export default function Messages() {
 
   const fetchMessages = () => {
     if (!currentUser) return;
-    
+
     console.log('📱 Messages: Setting up messages listener');
-    
+
     // Query for messages where current user is receiver
     const q1 = query(
       collection(db, 'messages'),
       where('receiverId', '==', currentUser.uid)
     );
-    
+
     // Query for messages where current user is sender
     const q2 = query(
       collection(db, 'messages'),
       where('senderId', '==', currentUser.uid)
     );
-    
+
+    // Debounce timeout for preventing rapid updates
+    let updateTimeout: NodeJS.Timeout | null = null;
+    let listener1Fired = false;
+    let listener2Fired = false;
+
     const updateMessages = async () => {
       try {
         const messagesList: Message[] = [];
-        
+
         // Get messages where user is receiver
         const snapshot1 = await getDocs(q1);
         console.log('📱 Messages: Received messages:', snapshot1.size);
         snapshot1.forEach((doc) => {
           messagesList.push({ id: doc.id, ...doc.data() } as Message);
         });
-        
+
         // Get messages where user is sender
         const snapshot2 = await getDocs(q2);
         console.log('📱 Messages: Sent messages:', snapshot2.size);
         snapshot2.forEach((doc) => {
           messagesList.push({ id: doc.id, ...doc.data() } as Message);
         });
-        
+
         // Remove duplicates (shouldn't happen but just in case)
-        const uniqueMessages = messagesList.filter((msg, index, arr) => 
+        const uniqueMessages = messagesList.filter((msg, index, arr) =>
           arr.findIndex(m => m.id === msg.id) === index
         );
-        
-        // Sort by timestamp, newest first
+
+        // Sort by timestamp, oldest first
         uniqueMessages.sort((a, b) => {
           const timeA = a.timestamp?.toDate?.() || new Date(0);
           const timeB = b.timestamp?.toDate?.() || new Date(0);
-          return timeA.getTime() - timeB.getTime(); // Changed to oldest first for chat display
+          return timeA.getTime() - timeB.getTime();
         });
-        
+
         console.log('📱 Messages: Total unique messages:', uniqueMessages.length);
         setMessages(uniqueMessages);
       } catch (error) {
         console.error('❌ Error fetching messages:', error);
       }
     };
-    
+
+    // Debounced update function to prevent rapid Firestore listener conflicts
+    const debouncedUpdate = () => {
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
+      updateTimeout = setTimeout(() => {
+        updateMessages();
+        listener1Fired = false;
+        listener2Fired = false;
+      }, 300);
+    };
+
     // Initial load
     updateMessages();
-    
-    // Listen for changes in both collections
-    const unsubscribe1 = onSnapshot(q1, () => {
-      updateMessages();
+
+    // Listen for changes in both collections with debouncing
+    const unsubscribe1 = onSnapshot(q1, (snapshot) => {
+      console.log('📱 Messages: Listener 1 fired');
+      listener1Fired = true;
+      debouncedUpdate();
+    }, (error) => {
+      console.error('❌ Error in messages listener 1:', error);
     });
-    const unsubscribe2 = onSnapshot(q2, () => {
-      updateMessages();
+
+    const unsubscribe2 = onSnapshot(q2, (snapshot) => {
+      console.log('📱 Messages: Listener 2 fired');
+      listener2Fired = true;
+      debouncedUpdate();
+    }, (error) => {
+      console.error('❌ Error in messages listener 2:', error);
     });
-    
+
     return () => {
+      if (updateTimeout) {
+        clearTimeout(updateTimeout);
+      }
       unsubscribe1();
       unsubscribe2();
     };
@@ -1185,26 +1261,22 @@ export default function Messages() {
               friendRequests.map((request) => (
                 <div key={request.id} className="friend-request-card">
                   <UserAvatar
-                    userId={request.senderId}
-                    displayName={request.senderName}
-                    photoURL={request.senderPhoto}
+                    userId={request.requesterId}
+                    displayName={request.requesterName}
                     size="medium"
                     clickable={true}
                     showName={false}
                   />
                   <div className="request-info">
-                    <strong 
-                      className="request-user-name clickable-name"
-                      onClick={() => navigateToProfile(navigate, request.senderId, currentUser?.uid)}
-                    >
-                      {request.senderName}
+                    <strong className="request-user-name">
+                      {request.requesterName}
                     </strong>
                     <p>wants to be your friend</p>
                   </div>
                   <div className="request-actions">
-                    <button 
+                    <button
                       className="accept-btn"
-                      onClick={() => handleAcceptRequest(request.id, request.senderId)}
+                      onClick={() => handleAcceptRequest(request.id, request.requesterId)}
                     >
                       <Check size={16} />
                       Accept

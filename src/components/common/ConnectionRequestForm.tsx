@@ -66,9 +66,10 @@ export const ConnectionRequestForm: React.FC<ConnectionRequestFormProps> = ({
 
     // Check if request already exists
     try {
-      const existing = await organizationConnectionService.checkRequestExists(
+      const existing = await organizationConnectionService.checkConnectionExists(
         organizationId,
-        athlete.id
+        athlete.id,
+        'org_to_athlete'
       );
       if (existing) {
         setExistingRequest(true);
@@ -104,12 +105,15 @@ export const ConnectionRequestForm: React.FC<ConnectionRequestFormProps> = ({
       }
 
       await organizationConnectionService.sendConnectionRequest({
-        organizationId,
-        organizationName,
-        athleteId: selectedAthlete.id,
-        athleteName: selectedAthlete.displayName,
-        athletePhotoURL: selectedAthlete.photoURL,
-        requestedByUserId: currentUser.uid
+        senderId: currentUser.uid,
+        senderName: organizationName,
+        senderPhotoURL: currentUser.photoURL || '',
+        senderRole: 'organization',
+        recipientId: selectedAthlete.id,
+        recipientName: selectedAthlete.displayName,
+        recipientPhotoURL: selectedAthlete.photoURL,
+        recipientRole: 'athlete',
+        connectionType: 'org_to_athlete'
       });
 
       setSuccess(true);
@@ -154,8 +158,8 @@ export const ConnectionRequestForm: React.FC<ConnectionRequestFormProps> = ({
         {/* Success Message */}
         {success && (
           <div className="message success">
-            ✓ Connection request sent successfully! The athlete will see your request pending
-            admin approval.
+            ✓ Connection request sent successfully! The athlete will receive your request and can
+            accept or reject it.
           </div>
         )}
 
@@ -251,8 +255,8 @@ export const ConnectionRequestForm: React.FC<ConnectionRequestFormProps> = ({
         <div className="info-box">
           <p>
             <strong>📌 How it works:</strong> Your connection request will be sent to the athlete
-            with a notification that an admin needs to approve it. Once approved, you both will be
-            able to message each other.
+            with a notification. They can accept or reject your request. Once they accept, you both
+            will be able to message each other.
           </p>
         </div>
 

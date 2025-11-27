@@ -1,6 +1,10 @@
 /**
  * Organization Connection Service
- * Manages connection requests between organizations and athletes
+ * Manages peer-to-peer connection requests between:
+ * - Organizations and Athletes (org_to_athlete)
+ * - Coaches and Organizations (coach_to_org)
+ *
+ * No admin approval required - recipients accept/reject directly
  */
 
 import { db } from '../../lib/firebase';
@@ -13,76 +17,86 @@ import {
   getDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
   Timestamp,
   QueryConstraint,
   orderBy,
   limit,
   startAfter,
-  Query,
-  writeBatch,
-  Transaction,
-  runTransaction
 } from 'firebase/firestore';
 import {
-  OrganizationConnectionRequest,
-  SendOrgConnectionRequestData,
-  ApprovedOrgConnection,
-  ConnectionInteraction,
-  ConnectionRequestFilter,
-  OrgConnectionStatus
+  OrganizationConnection,
+  ConnectionActivity,
+  SendConnectionRequestData,
+  AcceptConnectionRequestData,
+  RejectConnectionRequestData,
+  ConnectionType,
+  ConnectionStatus,
+  ConnectionStats,
+  ConnectionTimeline,
+  ConnectionFilter,
 } from '../../types/models/organizationConnection';
 
-const COLLECTION_NAME = 'organizationConnectionRequests';
-const INTERACTIONS_COLLECTION = 'connectionInteractions';
+const CONNECTIONS_COLLECTION = 'organizationConnections';
+const ACTIVITY_COLLECTION = 'connectionActivity';
 
 class OrganizationConnectionService {
   /**
-   * Send a connection request from organization to athlete
+   * Send a peer-to-peer connection request
+   * Supports both org→athlete and coach→org connections
    */
   async sendConnectionRequest(
-    data: SendOrgConnectionRequestData
-  ): Promise<OrganizationConnectionRequest> {
+    data: SendConnectionRequestData
+  ): Promise<OrganizationConnection> {
     try {
       // Check if request already exists
-      const existingRequest = await this.checkRequestExists(
-        data.organizationId,
-        data.athleteId
+      const existingRequest = await this.checkConnectionExists(
+        data.senderId,
+        data.recipientId,
+        data.connectionType
       );
 
       if (existingRequest) {
-        throw new Error('Connection request already exists for this organization and athlete');
+        throw new Error('Connection request already exists between these users');
       }
 
       // Create new connection request
-      const requestData = {
-        organizationId: data.organizationId,
-        organizationName: data.organizationName,
-        athleteId: data.athleteId,
-        athleteName: data.athleteName,
-        athletePhotoURL: data.athletePhotoURL,
-        status: 'pending' as OrgConnectionStatus,
-        requestDate: Timestamp.now(),
-        createdByUserId: data.requestedByUserId
+      const connectionData = {
+        connectionType: data.connectionType,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        senderPhotoURL: data.senderPhotoURL,
+        senderRole: data.senderRole,
+        recipientId: data.recipientId,
+        recipientName: data.recipientName,
+        recipientPhotoURL: data.recipientPhotoURL,
+        recipientRole: data.recipientRole,
+        status: 'pending' as ConnectionStatus,
+        createdAt: Timestamp.now(),
+        createdViaConnection: true,
       };
 
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), requestData);
+      const docRef = await addDoc(collection(db, CONNECTIONS_COLLECTION), connectionData);
 
-      // Log interaction
-      await this.logInteraction({
-        connectionRequestId: docRef.id,
-        organizationId: data.organizationId,
-        athleteId: data.athleteId,
+      // Log activity
+      await this.logConnectionActivity({
+        connectionId: docRef.id,
+        connectionType: data.connectionType,
         action: 'request_sent',
-        performedByUserId: data.requestedByUserId
+        performedByUserId: data.senderId,
+        performedByName: data.senderName,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        recipientId: data.recipientId,
+        recipientName: data.recipientName,
       });
 
       console.log('✅ Connection request sent:', docRef.id);
 
       return {
         id: docRef.id,
-        ...requestData,
-        requestDate: Timestamp.now()
-      } as OrganizationConnectionRequest;
+        ...connectionData,
+      } as OrganizationConnection;
     } catch (error) {
       console.error('❌ Error sending connection request:', error);
       throw error;
@@ -90,17 +104,19 @@ class OrganizationConnectionService {
   }
 
   /**
-   * Check if a connection request already exists between organization and athlete
+   * Check if a connection request already exists between two users
    */
-  async checkRequestExists(
-    organizationId: string,
-    athleteId: string
-  ): Promise<OrganizationConnectionRequest | null> {
+  async checkConnectionExists(
+    senderId: string,
+    recipientId: string,
+    connectionType: ConnectionType
+  ): Promise<OrganizationConnection | null> {
     try {
       const q = query(
-        collection(db, COLLECTION_NAME),
-        where('organizationId', '==', organizationId),
-        where('athleteId', '==', athleteId),
+        collection(db, CONNECTIONS_COLLECTION),
+        where('senderId', '==', senderId),
+        where('recipientId', '==', recipientId),
+        where('connectionType', '==', connectionType),
         where('status', '!=', 'rejected')
       );
 
@@ -113,106 +129,110 @@ class OrganizationConnectionService {
       const doc = querySnapshot.docs[0];
       return {
         id: doc.id,
-        ...doc.data()
-      } as OrganizationConnectionRequest;
+        ...doc.data(),
+      } as OrganizationConnection;
     } catch (error) {
-      console.error('❌ Error checking request existence:', error);
+      console.error('❌ Error checking connection existence:', error);
       throw error;
     }
   }
 
   /**
-   * Get all pending connection requests for an athlete
+   * Get all pending connection requests for a user (as recipient)
    */
-  async getAthleteConnectionRequests(
-    athleteId: string,
-    statusFilter?: OrgConnectionStatus
-  ): Promise<OrganizationConnectionRequest[]> {
+  async getPendingRequestsForUser(
+    userId: string,
+    connectionType?: ConnectionType
+  ): Promise<OrganizationConnection[]> {
     try {
       const constraints: QueryConstraint[] = [
-        where('athleteId', '==', athleteId)
+        where('recipientId', '==', userId),
+        where('status', '==', 'pending'),
       ];
 
-      if (statusFilter) {
-        constraints.push(where('status', '==', statusFilter));
+      if (connectionType) {
+        constraints.push(where('connectionType', '==', connectionType));
       }
 
       const q = query(
-        collection(db, COLLECTION_NAME),
+        collection(db, CONNECTIONS_COLLECTION),
         ...constraints,
-        orderBy('requestDate', 'desc')
+        orderBy('createdAt', 'desc')
       );
 
       const querySnapshot = await getDocs(q);
-      const requests = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as OrganizationConnectionRequest));
+      const requests = querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          } as OrganizationConnection)
+      );
 
-      console.log(`📋 Found ${requests.length} connection requests for athlete:`, athleteId);
+      console.log(`📋 Found ${requests.length} pending requests for user:`, userId);
       return requests;
     } catch (error) {
-      console.error('❌ Error getting athlete connection requests:', error);
+      console.error('❌ Error getting pending requests:', error);
       throw error;
     }
   }
 
   /**
-   * Get all connection requests sent by an organization
+   * Get all accepted connections for a user
    */
-  async getOrganizationRequests(
-    organizationId: string,
-    statusFilter?: OrgConnectionStatus
-  ): Promise<OrganizationConnectionRequest[]> {
+  async getAcceptedConnectionsForUser(
+    userId: string,
+    connectionType?: ConnectionType
+  ): Promise<OrganizationConnection[]> {
     try {
       const constraints: QueryConstraint[] = [
-        where('organizationId', '==', organizationId)
+        where('recipientId', '==', userId),
+        where('status', '==', 'accepted'),
       ];
 
-      if (statusFilter) {
-        constraints.push(where('status', '==', statusFilter));
+      if (connectionType) {
+        constraints.push(where('connectionType', '==', connectionType));
       }
 
       const q = query(
-        collection(db, COLLECTION_NAME),
+        collection(db, CONNECTIONS_COLLECTION),
         ...constraints,
-        orderBy('requestDate', 'desc')
+        orderBy('acceptedAt', 'desc')
       );
 
       const querySnapshot = await getDocs(q);
-      const requests = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as OrganizationConnectionRequest));
-
-      console.log(
-        `📋 Found ${requests.length} connection requests for organization:`,
-        organizationId
+      const connections = querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          } as OrganizationConnection)
       );
-      return requests;
+
+      return connections;
     } catch (error) {
-      console.error('❌ Error getting organization requests:', error);
+      console.error('❌ Error getting accepted connections:', error);
       throw error;
     }
   }
 
   /**
-   * Get connection request by ID
+   * Get single connection request by ID
    */
-  async getConnectionRequest(requestId: string): Promise<OrganizationConnectionRequest | null> {
+  async getConnectionRequest(connectionId: string): Promise<OrganizationConnection | null> {
     try {
-      const docRef = doc(db, COLLECTION_NAME, requestId);
+      const docRef = doc(db, CONNECTIONS_COLLECTION, connectionId);
       const docSnapshot = await getDoc(docRef);
 
       if (!docSnapshot.exists()) {
-        console.warn('⚠️ Connection request not found:', requestId);
+        console.warn('⚠️ Connection request not found:', connectionId);
         return null;
       }
 
       return {
         id: docSnapshot.id,
-        ...docSnapshot.data()
-      } as OrganizationConnectionRequest;
+        ...docSnapshot.data(),
+      } as OrganizationConnection;
     } catch (error) {
       console.error('❌ Error getting connection request:', error);
       throw error;
@@ -220,289 +240,532 @@ class OrganizationConnectionService {
   }
 
   /**
-   * Get approved connections for an athlete
+   * Accept a connection request (peer-to-peer)
+   * Recipient accepts and friendship is created
    */
-  async getApprovedConnectionsForAthlete(
-    athleteId: string
-  ): Promise<ApprovedOrgConnection[]> {
+  async acceptConnectionRequest(data: AcceptConnectionRequestData): Promise<OrganizationConnection> {
     try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where('athleteId', '==', athleteId),
-        where('status', '==', 'approved'),
-        orderBy('approvalDate', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const connections = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          organizationId: data.organizationId,
-          organizationName: data.organizationName,
-          athleteId: data.athleteId,
-          athleteName: data.athleteName,
-          approvalDate: data.approvalDate,
-          approvedByAdminId: data.approvedByAdminId,
-          approvedByAdminName: data.approvedByAdminName,
-          friendshipId: data.friendshipId || '',
-          notes: data.notes
-        } as ApprovedOrgConnection;
-      });
-
-      return connections;
-    } catch (error) {
-      console.error('❌ Error getting approved connections:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get approved connections for an organization
-   */
-  async getApprovedConnectionsForOrganization(
-    organizationId: string
-  ): Promise<ApprovedOrgConnection[]> {
-    try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        where('organizationId', '==', organizationId),
-        where('status', '==', 'approved'),
-        orderBy('approvalDate', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const connections = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          organizationId: data.organizationId,
-          organizationName: data.organizationName,
-          athleteId: data.athleteId,
-          athleteName: data.athleteName,
-          approvalDate: data.approvalDate,
-          approvedByAdminId: data.approvedByAdminId,
-          approvedByAdminName: data.approvedByAdminName,
-          friendshipId: data.friendshipId || '',
-          notes: data.notes
-        } as ApprovedOrgConnection;
-      });
-
-      return connections;
-    } catch (error) {
-      console.error('❌ Error getting approved connections for organization:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get connection history (all interactions) for an athlete
-   */
-  async getConnectionHistory(athleteId: string): Promise<ConnectionInteraction[]> {
-    try {
-      const q = query(
-        collection(db, INTERACTIONS_COLLECTION),
-        where('athleteId', '==', athleteId),
-        orderBy('actionDate', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const interactions = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as ConnectionInteraction));
-
-      return interactions;
-    } catch (error) {
-      console.error('❌ Error getting connection history:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Log a connection interaction
-   */
-  async logInteraction(interaction: Omit<ConnectionInteraction, 'id' | 'actionDate'>): Promise<void> {
-    try {
-      await addDoc(collection(db, INTERACTIONS_COLLECTION), {
-        ...interaction,
-        actionDate: Timestamp.now()
-      });
-
-      console.log('📝 Interaction logged:', interaction.action);
-    } catch (error) {
-      console.error('❌ Error logging interaction:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Update connection request status
-   * When approved, automatically creates a friendship between organization and athlete
-   */
-  async updateConnectionStatus(
-    requestId: string,
-    status: OrgConnectionStatus,
-    updates?: Record<string, any>
-  ): Promise<void> {
-    try {
-      // Get the connection request to fetch org/athlete details
-      const connectionRequest = await this.getConnectionRequest(requestId);
-      if (!connectionRequest) {
+      // Get the connection request
+      const connection = await this.getConnectionRequest(data.connectionId);
+      if (!connection) {
         throw new Error('Connection request not found');
       }
 
-      const docRef = doc(db, COLLECTION_NAME, requestId);
-      const updateData: Record<string, any> = { status };
+      // Update connection status
+      const connectionRef = doc(db, CONNECTIONS_COLLECTION, data.connectionId);
+      const acceptedAt = Timestamp.now();
 
-      if (status === 'approved') {
-        updateData.approvalDate = Timestamp.now();
+      await updateDoc(connectionRef, {
+        status: 'accepted',
+        acceptedAt,
+      });
 
-        // Auto-create friendship when connection is approved
-        try {
-          await addDoc(collection(db, 'friendships'), {
-            requesterId: connectionRequest.organizationId,
-            requesterName: connectionRequest.organizationName,
-            requesterPhotoURL: '',
-            recipientId: connectionRequest.athleteId,
-            recipientName: connectionRequest.athleteName,
-            recipientPhotoURL: connectionRequest.athletePhotoURL,
-            status: 'accepted',
-            createdAt: Timestamp.now(),
-            connectionRequestId: requestId,
-            createdViaOrgConnection: true
-          });
+      // Create friendship document
+      const friendshipRef = await addDoc(collection(db, 'friendships'), {
+        requesterId: connection.senderId,
+        requesterName: connection.senderName,
+        requesterPhotoURL: connection.senderPhotoURL,
+        recipientId: connection.recipientId,
+        recipientName: connection.recipientName,
+        recipientPhotoURL: connection.recipientPhotoURL,
+        status: 'accepted',
+        createdAt: acceptedAt,
+        connectionId: data.connectionId,
+        createdViaConnection: connection.connectionType,
+      });
 
-          console.log('✅ Friendship auto-created for approved connection');
-        } catch (friendshipError) {
-          console.error('⚠️ Error creating friendship (but connection approved):', friendshipError);
-          // Don't throw - connection is already approved, friendship creation is secondary
-        }
-      } else if (status === 'rejected') {
-        updateData.rejectionDate = Timestamp.now();
-      }
+      // Update connection with friendship ID
+      await updateDoc(connectionRef, {
+        friendshipId: friendshipRef.id,
+      });
 
-      if (updates) {
-        Object.assign(updateData, updates);
-      }
+      // Log activity
+      await this.logConnectionActivity({
+        connectionId: data.connectionId,
+        connectionType: connection.connectionType,
+        action: 'request_accepted',
+        performedByUserId: data.acceptedByUserId,
+        performedByName: data.acceptedByName,
+        senderId: connection.senderId,
+        senderName: connection.senderName,
+        recipientId: connection.recipientId,
+        recipientName: connection.recipientName,
+      });
 
-      await updateDoc(docRef, updateData);
-      console.log('✅ Connection status updated:', requestId, status);
+      console.log('✅ Connection request accepted:', data.connectionId);
+
+      return {
+        id: data.connectionId,
+        ...connection,
+        status: 'accepted',
+        acceptedAt,
+        friendshipId: friendshipRef.id,
+      };
     } catch (error) {
-      console.error('❌ Error updating connection status:', error);
+      console.error('❌ Error accepting connection request:', error);
       throw error;
     }
   }
 
   /**
-   * Get connection requests with filters
+   * Reject a connection request
    */
-  async getConnectionRequests(
-    filter: ConnectionRequestFilter,
-    pageSize: number = 20,
-    lastDoc?: any
-  ): Promise<{
-    requests: OrganizationConnectionRequest[];
-    lastDoc: any;
-  }> {
+  async rejectConnectionRequest(
+    data: RejectConnectionRequestData
+  ): Promise<OrganizationConnection> {
+    try {
+      // Get the connection request
+      const connection = await this.getConnectionRequest(data.connectionId);
+      if (!connection) {
+        throw new Error('Connection request not found');
+      }
+
+      // Update connection status
+      const connectionRef = doc(db, CONNECTIONS_COLLECTION, data.connectionId);
+      const rejectedAt = Timestamp.now();
+
+      await updateDoc(connectionRef, {
+        status: 'rejected',
+        rejectedAt,
+        rejectionReason: data.reason,
+      });
+
+      // Log activity
+      await this.logConnectionActivity({
+        connectionId: data.connectionId,
+        connectionType: connection.connectionType,
+        action: 'request_rejected',
+        performedByUserId: data.rejectedByUserId,
+        performedByName: data.rejectedByName,
+        senderId: connection.senderId,
+        senderName: connection.senderName,
+        recipientId: connection.recipientId,
+        recipientName: connection.recipientName,
+        metadata: { reason: data.reason },
+      });
+
+      console.log('✅ Connection request rejected:', data.connectionId);
+
+      return {
+        id: data.connectionId,
+        ...connection,
+        status: 'rejected',
+        rejectedAt,
+      };
+    } catch (error) {
+      console.error('❌ Error rejecting connection request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a pending connection request (sender can withdraw)
+   */
+  async cancelConnectionRequest(
+    connectionId: string,
+    cancelledByUserId: string
+  ): Promise<void> {
+    try {
+      const connection = await this.getConnectionRequest(connectionId);
+
+      if (!connection) {
+        throw new Error('Connection request not found');
+      }
+
+      if (connection.status !== 'pending') {
+        throw new Error('Can only cancel pending connection requests');
+      }
+
+      if (connection.senderId !== cancelledByUserId) {
+        throw new Error('Only the sender can cancel a connection request');
+      }
+
+      // Delete the connection request
+      const connectionRef = doc(db, CONNECTIONS_COLLECTION, connectionId);
+      await deleteDoc(connectionRef);
+
+      // Log activity
+      await this.logConnectionActivity({
+        connectionId,
+        connectionType: connection.connectionType,
+        action: 'request_cancelled',
+        performedByUserId: cancelledByUserId,
+        performedByName: connection.senderName,
+        senderId: connection.senderId,
+        senderName: connection.senderName,
+        recipientId: connection.recipientId,
+        recipientName: connection.recipientName,
+      });
+
+      console.log('✅ Connection request cancelled:', connectionId);
+    } catch (error) {
+      console.error('❌ Error cancelling connection request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Log connection activity for audit trail and admin dashboard
+   */
+  async logConnectionActivity(
+    activity: Omit<ConnectionActivity, 'id' | 'actionDate'>
+  ): Promise<void> {
+    try {
+      await addDoc(collection(db, ACTIVITY_COLLECTION), {
+        ...activity,
+        actionDate: Timestamp.now(),
+      });
+
+      console.log('📝 Activity logged:', activity.action);
+    } catch (error) {
+      console.error('❌ Error logging activity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get connection activity history for admin dashboard
+   */
+  async getConnectionActivityHistory(filters?: {
+    connectionType?: ConnectionType;
+    limit?: number;
+  }): Promise<ConnectionActivity[]> {
     try {
       const constraints: QueryConstraint[] = [];
 
-      if (filter.status) {
-        constraints.push(where('status', '==', filter.status));
+      if (filters?.connectionType) {
+        constraints.push(where('connectionType', '==', filters.connectionType));
       }
 
-      if (filter.organizationId) {
-        constraints.push(where('organizationId', '==', filter.organizationId));
-      }
+      constraints.push(orderBy('actionDate', 'desc'));
+      constraints.push(limit(filters?.limit || 50));
 
-      if (filter.athleteId) {
-        constraints.push(where('athleteId', '==', filter.athleteId));
-      }
-
-      constraints.push(orderBy('requestDate', 'desc'));
-      constraints.push(limit(pageSize + 1));
-
-      if (lastDoc) {
-        constraints.push(startAfter(lastDoc));
-      }
-
-      const q = query(collection(db, COLLECTION_NAME), ...constraints);
+      const q = query(collection(db, ACTIVITY_COLLECTION), ...constraints);
       const querySnapshot = await getDocs(q);
 
-      const docs = querySnapshot.docs;
-      const hasMore = docs.length > pageSize;
-      const requests = docs.slice(0, pageSize).map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as OrganizationConnectionRequest));
+      return querySnapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          } as ConnectionActivity)
+      );
+    } catch (error) {
+      console.error('❌ Error getting activity history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get connection statistics for admin dashboard
+   */
+  async getConnectionStats(): Promise<ConnectionStats> {
+    try {
+      // Get counts for each status
+      const statsPromises = [
+        this.getCountByStatus('pending'),
+        this.getCountByStatus('accepted'),
+        this.getCountByStatus('rejected'),
+      ];
+
+      const [pendingCount, acceptedCount, rejectedCount] = await Promise.all(statsPromises);
+
+      const total = pendingCount + acceptedCount + rejectedCount;
+      const acceptanceRate = total > 0 ? (acceptedCount / total) * 100 : 0;
+
+      // Get average days to accept
+      const avgDaysToAccept = await this.calculateAverageDaysToAccept();
 
       return {
-        requests,
-        lastDoc: hasMore ? docs[pageSize - 1] : null
+        totalPending: pendingCount,
+        totalAccepted: acceptedCount,
+        totalRejected: rejectedCount,
+        acceptanceRate: Math.round(acceptanceRate * 100) / 100,
+        averageDaysToAccept: avgDaysToAccept,
       };
     } catch (error) {
-      console.error('❌ Error getting connection requests:', error);
+      console.error('❌ Error getting connection stats:', error);
       throw error;
     }
   }
 
   /**
-   * Delete a connection request (only pending/rejected)
+   * Get timeline data for connection analytics
    */
-  async deleteConnectionRequest(requestId: string): Promise<void> {
+  async getConnectionTimeline(days: number = 30): Promise<ConnectionTimeline[]> {
     try {
-      const request = await this.getConnectionRequest(requestId);
+      const now = new Date();
+      const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-      if (!request) {
-        throw new Error('Connection request not found');
-      }
+      const activities = await this.getConnectionActivityHistory({ limit: 1000 });
 
-      if (request.status === 'approved') {
-        throw new Error('Cannot delete an approved connection request');
-      }
+      // Group by date
+      const timelineMap = new Map<string, ConnectionTimeline>();
 
-      const docRef = doc(db, COLLECTION_NAME, requestId);
-      await updateDoc(docRef, {
-        deletedAt: Timestamp.now(),
-        isDeleted: true
+      activities.forEach((activity) => {
+        const date = new Date(activity.actionDate as any);
+        if (date >= startDate) {
+          const dateStr = date.toISOString().split('T')[0];
+
+          if (!timelineMap.has(dateStr)) {
+            timelineMap.set(dateStr, {
+              date: dateStr,
+              newRequests: 0,
+              accepted: 0,
+              rejected: 0,
+            });
+          }
+
+          const timeline = timelineMap.get(dateStr)!;
+          if (activity.action === 'request_sent') timeline.newRequests++;
+          else if (activity.action === 'request_accepted') timeline.accepted++;
+          else if (activity.action === 'request_rejected') timeline.rejected++;
+        }
       });
 
-      console.log('✅ Connection request deleted:', requestId);
+      return Array.from(timelineMap.values()).sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
     } catch (error) {
-      console.error('❌ Error deleting connection request:', error);
+      console.error('❌ Error getting timeline:', error);
       throw error;
     }
   }
 
-  /**
-   * Track a connection interaction (message sent, call initiated, etc.)
-   */
-  async trackConnectionInteraction(
-    connectionId: string,
-    action: 'request_sent' | 'request_approved' | 'request_rejected' | 'message_sent' | 'call_initiated',
-    metadata?: Record<string, any>
-  ): Promise<void> {
+  // ============ Helper Methods ============
+
+  private async getCountByStatus(status: ConnectionStatus): Promise<number> {
+    const q = query(
+      collection(db, CONNECTIONS_COLLECTION),
+      where('status', '==', status)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.size;
+  }
+
+  private async calculateAverageDaysToAccept(): Promise<number> {
     try {
-      const request = await this.getConnectionRequest(connectionId);
+      const q = query(
+        collection(db, CONNECTIONS_COLLECTION),
+        where('status', '==', 'accepted')
+      );
+      const snapshot = await getDocs(q);
 
-      if (!request) {
-        throw new Error('Connection request not found');
-      }
+      if (snapshot.empty) return 0;
 
-      await this.logInteraction({
-        connectionRequestId: connectionId,
-        organizationId: request.organizationId,
-        athleteId: request.athleteId,
-        action: action as any,
-        performedByUserId: '', // Will be set by caller
-        metadata
+      let totalDays = 0;
+      let count = 0;
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.createdAt && data.acceptedAt) {
+          const createdTime = (data.createdAt as Timestamp).toMillis();
+          const acceptedTime = (data.acceptedAt as Timestamp).toMillis();
+          const days = (acceptedTime - createdTime) / (1000 * 60 * 60 * 24);
+          totalDays += days;
+          count++;
+        }
       });
 
-      console.log('✅ Interaction tracked:', action);
+      return count > 0 ? Math.round(totalDays / count * 10) / 10 : 0;
     } catch (error) {
-      console.error('❌ Error tracking interaction:', error);
-      throw error;
+      console.error('❌ Error calculating average days:', error);
+      return 0;
+    }
+  }
+
+  private async getTopSendersByRole(
+    senderRole: 'organization' | 'coach',
+    connectionType: ConnectionType,
+    limit: number
+  ): Promise<
+    Array<{
+      organizationId?: string;
+      organizationName?: string;
+      coachId?: string;
+      coachName?: string;
+      totalRequests: number;
+      accepted: number;
+      pending: number;
+      acceptanceRate: number;
+    }>
+  > {
+    try {
+      const q = query(
+        collection(db, CONNECTIONS_COLLECTION),
+        where('senderRole', '==', senderRole),
+        where('connectionType', '==', connectionType)
+      );
+
+      const snapshot = await getDocs(q);
+      const senderMap = new Map<
+        string,
+        { name: string; totalRequests: number; accepted: number; pending: number }
+      >();
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const senderId = data.senderId;
+        const senderName = data.senderName;
+
+        if (!senderMap.has(senderId)) {
+          senderMap.set(senderId, {
+            name: senderName,
+            totalRequests: 0,
+            accepted: 0,
+            pending: 0,
+          });
+        }
+
+        const sender = senderMap.get(senderId)!;
+        sender.totalRequests++;
+        if (data.status === 'accepted') sender.accepted++;
+        if (data.status === 'pending') sender.pending++;
+      });
+
+      return Array.from(senderMap.entries())
+        .map(([senderId, data]) => ({
+          ...(senderRole === 'organization'
+            ? { organizationId: senderId, organizationName: data.name }
+            : { coachId: senderId, coachName: data.name }),
+          totalRequests: data.totalRequests,
+          accepted: data.accepted,
+          pending: data.pending,
+          acceptanceRate:
+            data.totalRequests > 0
+              ? Math.round((data.accepted / data.totalRequests) * 100 * 100) / 100
+              : 0,
+        }))
+        .sort((a, b) => b.totalRequests - a.totalRequests)
+        .slice(0, limit);
+    } catch (error) {
+      console.error('❌ Error getting top senders:', error);
+      return [];
+    }
+  }
+
+  private async getTopRecipients(
+    connectionType: ConnectionType,
+    limit: number
+  ): Promise<
+    Array<{
+      athleteId: string;
+      athleteName: string;
+      totalRequests: number;
+      accepted: number;
+      pending: number;
+      acceptanceRate: number;
+    }>
+  > {
+    try {
+      const q = query(
+        collection(db, CONNECTIONS_COLLECTION),
+        where('connectionType', '==', connectionType)
+      );
+
+      const snapshot = await getDocs(q);
+      const recipientMap = new Map<
+        string,
+        { name: string; totalRequests: number; accepted: number; pending: number }
+      >();
+
+      snapshot.docs.forEach((doc) => {
+        const data = doc.data();
+        const recipientId = data.recipientId;
+        const recipientName = data.recipientName;
+
+        if (!recipientMap.has(recipientId)) {
+          recipientMap.set(recipientId, {
+            name: recipientName,
+            totalRequests: 0,
+            accepted: 0,
+            pending: 0,
+          });
+        }
+
+        const recipient = recipientMap.get(recipientId)!;
+        recipient.totalRequests++;
+        if (data.status === 'accepted') recipient.accepted++;
+        if (data.status === 'pending') recipient.pending++;
+      });
+
+      return Array.from(recipientMap.entries())
+        .map(([recipientId, data]) => ({
+          athleteId: recipientId,
+          athleteName: data.name,
+          totalRequests: data.totalRequests,
+          accepted: data.accepted,
+          pending: data.pending,
+          acceptanceRate:
+            data.totalRequests > 0
+              ? Math.round((data.accepted / data.totalRequests) * 100 * 100) / 100
+              : 0,
+        }))
+        .sort((a, b) => b.totalRequests - a.totalRequests)
+        .slice(0, limit);
+    } catch (error) {
+      console.error('❌ Error getting top recipients:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all incoming pending requests for a user (convenience alias)
+   */
+  async getIncomingPendingRequests(recipientId: string): Promise<OrganizationConnection[]> {
+    return this.getPendingRequestsForUser(recipientId);
+  }
+
+  /**
+   * Get all accepted connections for a user (convenience alias)
+   */
+  async getAcceptedConnections(recipientId: string): Promise<OrganizationConnection[]> {
+    return this.getAcceptedConnectionsForUser(recipientId);
+  }
+
+  /**
+   * Get connection status between two users (checks both directions)
+   * Returns 'pending', 'accepted', 'none', or 'rejected'
+   */
+  async getConnectionStatusBetweenUsers(
+    userId1: string,
+    userId2: string
+  ): Promise<'pending' | 'accepted' | 'rejected' | 'none'> {
+    try {
+      // Check if userId1 sent a request to userId2
+      const q1 = query(
+        collection(db, CONNECTIONS_COLLECTION),
+        where('senderId', '==', userId1),
+        where('recipientId', '==', userId2),
+        where('status', 'in', ['pending', 'accepted', 'rejected'])
+      );
+
+      const snapshot1 = await getDocs(q1);
+
+      if (!snapshot1.empty) {
+        const status = snapshot1.docs[0].data().status as ConnectionStatus;
+        return status;
+      }
+
+      // Check if userId2 sent a request to userId1
+      const q2 = query(
+        collection(db, CONNECTIONS_COLLECTION),
+        where('senderId', '==', userId2),
+        where('recipientId', '==', userId1),
+        where('status', 'in', ['pending', 'accepted', 'rejected'])
+      );
+
+      const snapshot2 = await getDocs(q2);
+
+      if (!snapshot2.empty) {
+        const status = snapshot2.docs[0].data().status as ConnectionStatus;
+        return status;
+      }
+
+      return 'none';
+    } catch (error) {
+      console.error('❌ Error getting connection status between users:', error);
+      return 'none';
     }
   }
 }

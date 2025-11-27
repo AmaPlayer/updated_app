@@ -97,7 +97,13 @@ const EventManagement: React.FC = () => {
       category: event?.category || 'other',
       maxParticipants: event?.maxParticipants || 0,
       isActive: event?.isActive ?? true,
-      imageUrl: event?.imageUrl || ''
+      imageUrl: event?.imageUrl || '',
+      submissionDeadline: event?.submissionDeadline ? new Date(event.submissionDeadline).toISOString().slice(0, 16) : '',
+      winnerCount: event?.winnerCount || 3,
+      eventRequirements: event?.eventRequirements ? {
+        description: event.eventRequirements.description || '',
+        criteria: event.eventRequirements.criteria?.join('\n') || ''
+      } : { description: '', criteria: '' }
     });
     const [submitting, setSubmitting] = useState(false);
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -123,7 +129,7 @@ const EventManagement: React.FC = () => {
       setUploadingImage(true);
       try {
         console.log('Uploading file:', file.name, 'Size:', file.size);
-        
+
         // Validate file
         if (!file || file.size === 0) {
           throw new Error('Invalid file selected');
@@ -136,7 +142,7 @@ const EventManagement: React.FC = () => {
         const timestamp = Date.now();
         const fileName = `events/${timestamp}-${file.name}`;
         const storageRef = ref(storage, fileName);
-        
+
         console.log('Uploading to path:', fileName);
         const snapshot = await uploadBytes(storageRef, file);
         console.log('Upload snapshot:', snapshot);
@@ -172,6 +178,15 @@ const EventManagement: React.FC = () => {
         const eventData = {
           ...formData,
           imageUrl: finalImageUrl,
+          submissionDeadline: formData.submissionDeadline ? new Date(formData.submissionDeadline) : undefined,
+          winnerCount: formData.winnerCount || 3,
+          eventRequirements: formData.eventRequirements?.description ? {
+            description: formData.eventRequirements.description,
+            criteria: formData.eventRequirements.criteria
+              .split('\n')
+              .map(c => c.trim())
+              .filter(c => c.length > 0)
+          } : undefined,
           organizer: 'Admin',
           contactEmail: 'admin@amaplayer.com'
         };
@@ -193,7 +208,17 @@ const EventManagement: React.FC = () => {
         onClose();
       } catch (error) {
         console.error('Error saving event:', error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+        let errorMessage = 'Unknown error occurred';
+
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === 'object' && error !== null) {
+          errorMessage = (error as any).code || (error as any).message || JSON.stringify(error);
+        } else {
+          errorMessage = String(error);
+        }
+
         alert(`Error saving event: ${errorMessage}`);
       } finally {
         setSubmitting(false);
@@ -287,6 +312,76 @@ const EventManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter event location"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Submission Deadline (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={formData.submissionDeadline}
+                  onChange={(e) => setFormData({ ...formData, submissionDeadline: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">When users must submit their talent videos</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🏆 Number of Winner Positions (Optional)
+                </label>
+                <select
+                  value={formData.winnerCount || 3}
+                  onChange={(e) => setFormData({ ...formData, winnerCount: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="1">1 Winner (1st Place Only)</option>
+                  <option value="2">2 Winners (1st & 2nd Place)</option>
+                  <option value="3">3 Winners (Podium - 1st, 2nd, 3rd)</option>
+                  <option value="4">4 Winners (+ 4th Place)</option>
+                  <option value="5">5 Winners (+ 5th Place)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">How many top submissions to rank as winners. Default is 3 (1st, 2nd, 3rd place).</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Event Requirements - Description (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={formData.eventRequirements?.description || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    eventRequirements: {
+                      ...formData.eventRequirements,
+                      description: e.target.value
+                    }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Show us your best sprint! Athletes must complete a 100m sprint and submit a video."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Event Requirements - Criteria (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={formData.eventRequirements?.criteria || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    eventRequirements: {
+                      ...formData.eventRequirements,
+                      criteria: e.target.value
+                    }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter criteria (one per line):&#10;Must be 100m sprint&#10;Video should be clear and well-lit&#10;Maximum duration 30 seconds"
+                />
+                <p className="text-xs text-gray-500 mt-1">One criterion per line - these will be displayed to participants</p>
               </div>
 
               {/* Event Image Upload */}

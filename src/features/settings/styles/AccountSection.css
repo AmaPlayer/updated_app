@@ -181,6 +181,40 @@
   font-style: italic;
 }
 
+/* Password Status Styles */
+.password-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.password-set {
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.password-not-set {
+  color: #d97706;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.password-status-hint {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-left: 3px solid #d97706;
+  border-radius: 3px;
+}
+
 .field-error {
   font-size: 12px;
   color: #dc2626;

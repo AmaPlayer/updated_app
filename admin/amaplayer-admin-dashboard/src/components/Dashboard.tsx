@@ -161,15 +161,25 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
+      console.log('🚀 Starting to load dashboard data...');
       setLoading(true);
       setUsersLoading(true);
-      
-      const [userStats, videoStats, events, allUsers] = await Promise.all([
-        userManagementService.getUserStats(),
-        videoVerificationService.getVerificationStats(),
-        eventsService.getAllEvents(),
-        userManagementService.getAllUsers()
-      ]);
+
+      console.log('📍 Calling getUserStats...');
+      const userStats = await userManagementService.getUserStats();
+      console.log('✅ User stats loaded:', userStats);
+
+      console.log('📍 Calling getVerificationStats...');
+      const videoStats = await videoVerificationService.getVerificationStats();
+      console.log('✅ Video stats loaded:', videoStats);
+
+      console.log('📍 Calling getAllEvents...');
+      const events = await eventsService.getAllEvents();
+      console.log('✅ Events loaded:', events.length, 'events');
+
+      console.log('📍 Calling getAllUsers...');
+      const allUsers = await userManagementService.getAllUsers();
+      console.log('✅ Users loaded:', allUsers.length, 'users');
 
       const eventStats = {
         total: events.length,
@@ -181,10 +191,12 @@ const Dashboard: React.FC = () => {
         videos: videoStats,
         events: eventStats
       });
-      
+
       setUsers(allUsers);
+      console.log('✅ Dashboard data loaded successfully');
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('❌ Error loading dashboard data:', error);
+      console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
       setUsersLoading(false);

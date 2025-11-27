@@ -117,8 +117,8 @@ const Settings: React.FC<SettingsPageProps> = ({ initialTab = 'account' }) => {
           <div className="settings-tab-content">
             <h3>Security Settings</h3>
             <p>Manage your password and security preferences.</p>
-            
-            {!isGuest && currentUser ? (
+
+            {!isGuest() && currentUser ? (
               <PasswordChangeSection />
             ) : (
               <div className="settings-section">

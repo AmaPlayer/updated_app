@@ -8,10 +8,6 @@ import { Post as PostType } from '../../../types/models';
 import { User } from 'firebase/auth';
 import './PostsFeed.css';
 
-interface CommentForms {
-  newComment: Record<string, string>;
-}
-
 interface PostsFeedProps {
   posts?: PostType[];
   loading?: boolean;
@@ -25,10 +21,6 @@ interface PostsFeedProps {
   onEditPost?: (postId: string, newCaption: string) => void;
   onSharePost?: (postId: string, post: PostType) => void;
   onDeletePost?: (postId: string, post: PostType) => void;
-  onCommentSubmit?: (postId: string, commentText: string) => void;
-  onDeleteComment?: (postId: string, index: number) => void;
-  onEditComment?: (postId: string, index: number, newText: string) => void;
-  onLikeComment?: (postId: string, index: number) => void;
   onUserClick?: (userId: string) => void;
 }
 
@@ -66,10 +58,6 @@ const PostsFeed: React.FC<PostsFeedProps> = memo(({
   onEditPost,
   onSharePost,
   onDeletePost,
-  onCommentSubmit,
-  onDeleteComment,
-  onEditComment,
-  onLikeComment,
   onUserClick
 }) => {
   // Use PostInteractionsStore for UI state
@@ -244,7 +232,6 @@ const PostsFeed: React.FC<PostsFeedProps> = memo(({
           editingPost={editingPost}
           editText={editText}
           shareSuccess={shareSuccess}
-          forms={{ newComment: commentText }}
           onLike={onLike!}
           onToggleComments={toggleComments}
           onTogglePostMenu={toggleMenu}
@@ -262,14 +249,6 @@ const PostsFeed: React.FC<PostsFeedProps> = memo(({
             setShareSuccess(postId, true);
           }}
           onDeletePost={onDeletePost!}
-          onCommentSubmit={(postId, commentText) => {
-            if (onCommentSubmit) onCommentSubmit(postId, commentText);
-            setCommentText(postId, ''); // Clear comment after submission
-          }}
-          onDeleteComment={onDeleteComment!}
-          onEditComment={onEditComment || (() => {})}
-          onLikeComment={onLikeComment || (() => {})}
-          onSetNewComment={setCommentText}
           onSetEditText={setEditText}
           onUserClick={onUserClick}
         />

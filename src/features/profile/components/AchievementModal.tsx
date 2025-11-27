@@ -22,7 +22,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
     category: '',
     dateEarned: '',
     imageUrl: '',
-    verificationStatus: 'unverified' as 'verified' | 'pending' | 'unverified'
+    verificationStatus: 'unverified' as 'verified' | 'pending' | 'unverified',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -74,19 +74,13 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.title.trim()) {
-      newErrors.title = 'Achievement title is required';
-    } else if (formData.title.length > 100) {
+    // Only validate if title is filled in
+    if (formData.title.trim() && formData.title.length > 100) {
       newErrors.title = 'Title must be 100 characters or less';
     }
 
-    if (!formData.category.trim()) {
-      newErrors.category = 'Category is required';
-    }
-
-    if (!formData.dateEarned) {
-      newErrors.dateEarned = 'Date earned is required';
-    } else {
+    // Only validate if date is filled in
+    if (formData.dateEarned) {
       const selectedDate = new Date(formData.dateEarned);
       const today = new Date();
       if (selectedDate > today) {
@@ -94,10 +88,12 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
       }
     }
 
+    // Validate description length only if filled
     if (formData.description.length > 500) {
       newErrors.description = 'Description must be 500 characters or less';
     }
 
+    // Validate URL only if provided
     if (formData.imageUrl && !isValidUrl(formData.imageUrl)) {
       newErrors.imageUrl = 'Please enter a valid image URL';
     }
@@ -157,15 +153,13 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
   };
 
   const categoryOptions = [
-    'Championship',
-    'Tournament',
-    'Competition',
-    'Medal',
-    'Award',
-    'Recognition',
-    'Personal Best',
+    'Championship / Title',
+    'Tournament / Competition',
+    'Medal / Award',
+    'Personal Best Record',
     'Team Achievement',
-    'Academic',
+    'Selection / Representation',
+    'Recognition / Honour',
     'Other'
   ];
 
@@ -201,9 +195,10 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
         <form onSubmit={handleSubmit} className="modal-form" noValidate>
           <div className="form-section">
             <div className="form-group">
-              <label htmlFor="achievement-title" className="form-label required">
+              <label htmlFor="achievement-title" className="form-label">
                 <Tag size={16} aria-hidden="true" />
-                Achievement Title
+                What did you achieve?
+                <span className="form-label-optional">(Optional)</span>
               </label>
               <input
                 id="achievement-title"
@@ -211,9 +206,8 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
                 className={`form-input ${errors.title ? 'error' : ''}`}
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="e.g., Regional Swimming Championship"
+                placeholder="e.g., Won State Championship 2024, Broke School Record, Made National Team"
                 maxLength={100}
-                required
                 aria-describedby={errors.title ? 'title-error' : undefined}
               />
               {errors.title && (
@@ -224,16 +218,16 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="achievement-category" className="form-label required">
+              <label htmlFor="achievement-category" className="form-label">
                 <Trophy size={16} aria-hidden="true" />
                 Category
+                <span className="form-label-optional">(Optional)</span>
               </label>
               <select
                 id="achievement-category"
                 className={`form-select ${errors.category ? 'error' : ''}`}
                 value={formData.category}
                 onChange={(e) => handleInputChange('category', e.target.value)}
-                required
                 aria-describedby={errors.category ? 'category-error' : undefined}
               >
                 <option value="">Select a category</option>
@@ -251,9 +245,10 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label htmlFor="achievement-date" className="form-label required">
+              <label htmlFor="achievement-date" className="form-label">
                 <Calendar size={16} aria-hidden="true" />
                 Date Earned
+                <span className="form-label-optional">(Optional)</span>
               </label>
               <input
                 id="achievement-date"
@@ -262,7 +257,6 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
                 value={formData.dateEarned}
                 onChange={(e) => handleInputChange('dateEarned', e.target.value)}
                 max={new Date().toISOString().split('T')[0]}
-                required
                 aria-describedby={errors.dateEarned ? 'date-error' : undefined}
               />
               {errors.dateEarned && (
@@ -285,8 +279,8 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
                 className={`form-textarea ${errors.description ? 'error' : ''}`}
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
-                placeholder="Describe your achievement, what it means to you, or any additional details..."
-                rows={4}
+                placeholder="Tell us more about your achievement... (e.g., what you accomplished, how proud you are)"
+                rows={3}
                 maxLength={500}
                 aria-describedby={errors.description ? 'description-error' : 'description-help'}
               />
@@ -298,50 +292,6 @@ const AchievementModal: React.FC<AchievementModalProps> = ({
                   {errors.description}
                 </span>
               )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="achievement-image" className="form-label">
-                <Upload size={16} aria-hidden="true" />
-                Image URL
-                <span className="form-label-optional">(Optional)</span>
-              </label>
-              <input
-                id="achievement-image"
-                type="url"
-                className={`form-input ${errors.imageUrl ? 'error' : ''}`}
-                value={formData.imageUrl}
-                onChange={(e) => handleInputChange('imageUrl', e.target.value)}
-                placeholder="https://example.com/achievement-badge.jpg"
-                aria-describedby={errors.imageUrl ? 'image-error' : 'image-help'}
-              />
-              <div id="image-help" className="form-help">
-                Add a URL to an image of your achievement badge, certificate, or trophy
-              </div>
-              {errors.imageUrl && (
-                <span id="image-error" className="form-error" role="alert">
-                  {errors.imageUrl}
-                </span>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="achievement-verification" className="form-label">
-                Verification Status
-              </label>
-              <select
-                id="achievement-verification"
-                className="form-select"
-                value={formData.verificationStatus}
-                onChange={(e) => handleInputChange('verificationStatus', e.target.value as any)}
-              >
-                <option value="unverified">Unverified</option>
-                <option value="pending">Pending Verification</option>
-                <option value="verified">Verified</option>
-              </select>
-              <div className="form-help">
-                Verification helps others trust the authenticity of your achievements
-              </div>
             </div>
           </div>
 

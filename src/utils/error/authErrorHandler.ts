@@ -27,8 +27,8 @@ const AUTH_ERROR_MESSAGES: Record<string, AuthErrorMapping> = {
     severity: 'error'
   },
   'auth/wrong-password': {
-    message: 'Incorrect password.',
-    action: 'Please check your password and try again.',
+    message: 'The password you entered is incorrect.',
+    action: 'Please check your password and try again. If you forgot your password, you can reset it.',
     severity: 'error'
   },
   'auth/invalid-email': {
@@ -58,19 +58,25 @@ const AUTH_ERROR_MESSAGES: Record<string, AuthErrorMapping> = {
 
   // Password change errors
   'auth/requires-recent-login': {
-    message: 'For security, please log out and log back in.',
-    action: 'Log out and log back in to change your password.',
+    message: 'For security, we need you to re-authenticate.',
+    action: 'Please log out and log back in, then try changing your password again.',
     severity: 'warning',
     requiresReauth: true,
     suggestedAction: 'reauthenticate'
   },
   'auth/weak-password': {
-    message: 'Password is too weak.',
-    action: 'Use at least 8 characters with letters, numbers, and symbols.',
+    message: 'Password is too weak. Please use a stronger password.',
+    action: 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and special characters.',
     severity: 'error'
   },
   'auth/missing-password': {
     message: 'Password is required.',
+    action: 'Please enter a password.',
+    severity: 'error'
+  },
+  'auth/credential-already-in-use': {
+    message: 'This email is already associated with another account.',
+    action: 'You may link your accounts instead. Try signing in with your existing account first.',
     severity: 'error'
   },
 
@@ -146,6 +152,13 @@ const AUTH_ERROR_MESSAGES: Record<string, AuthErrorMapping> = {
   'auth/account-exists-with-different-credential': {
     message: 'An account already exists with this email.',
     action: 'You can link your accounts to use multiple sign-in methods.',
+    severity: 'info'
+  },
+
+  // OAuth reauthentication errors
+  'auth/user-cancelled-login': {
+    message: 'You cancelled the authentication.',
+    action: 'Please try again to verify your identity.',
     severity: 'info'
   },
 

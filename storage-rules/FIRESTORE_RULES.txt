@@ -1,0 +1,754 @@
+// =====================================================================
+// COMPREHENSIVE FIRESTORE SECURITY RULES FOR AMAPLAYER
+// Includes: User Management, Admin Functions, Connections, Indexes
+// =====================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // HELPER FUNCTIONS
+    // =====================================================================
+
+    function isGuestUser() {
+      return request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function isAdminUser() {
+      return request.auth != null && (
+        request.auth.token.email != null && (
+          request.auth.token.email.contains('admin') ||
+          request.auth.token.email.contains('moderator') ||
+          request.auth.token.email == 'admin@amaplayer.com' ||
+          request.auth.token.email == 'krishnakantbhardwaj2000@gmail.com'
+        )
+      ) || request.auth != null; // Fallback for development
+    }
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function onlyFollowCountsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['following']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens', 'lastTokenUpdate']);
+    }
+
+    function onlyEngagementChanged() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(['likes', 'likesCount', 'updatedAt']) ||
+             affectedKeys.hasOnly(['likes', 'likesCount']) ||
+             affectedKeys.hasOnly(['likes', 'updatedAt']) ||
+             affectedKeys.hasOnly(['likes']) ||
+             affectedKeys.hasOnly(['likesCount']);
+    }
+
+    function onlyCommentCountChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'commentsCount', 'updatedAt']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'commentsCount']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'updatedAt']) ||
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']);
+    }
+
+    // =====================================================================
+    // ADMIN COLLECTIONS
+    // =====================================================================
+
+    // Admin Users Collection - for admin dashboard access
+    match /admins/{adminId} {
+      allow read: if request.auth != null && (
+        isAdminUser() ||
+        isOwner(adminId)
+      );
+      allow create: if request.auth != null && (
+        request.auth.token.email == 'admin@amaplayer.com' ||
+        isAdminUser()
+      );
+      allow update: if request.auth != null && isAdminUser();
+      allow delete: if request.auth != null && isAdminUser();
+    }
+
+    // Events Management Collection
+    match /events/{eventId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && isAdminUser();
+    }
+
+    // Event Submissions Collection - For talent competition videos
+    match /eventSubmissions/{submissionId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        isAdminUser()
+      );
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateSubmissionData();
+      allow update: if request.auth != null && (
+        (isOwner(resource.data.userId) && onlySubmissionDataChanged()) ||
+        (isAdminUser() && onlyRankAndPrizeChanged())
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Video Verification Collection
+    match /videoVerifications/{videoId} {
+      allow read, write: if request.auth != null && isAdminUser();
+    }
+
+    // Admin Logs Collection
+    match /adminLogs/{logId} {
+      allow read, write: if request.auth != null && isAdminUser();
+    }
+
+    // =====================================================================
+    // USER MANAGEMENT COLLECTIONS
+    // =====================================================================
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(userId);
+      allow update: if request.auth != null &&
+        !isGuestUser() &&
+        (isOwner(userId) || onlyFollowCountsChanged());
+    }
+
+    // User Violations Collection
+    match /userViolations/{userId} {
+      allow read, write: if request.auth != null && isAdminUser();
+    }
+
+    // =====================================================================
+    // CONNECTION COLLECTIONS
+    // =====================================================================
+
+    // Organization Connection Requests - for admin approval of org-athlete connections
+    match /organizationConnectionRequests/{requestId} {
+      allow read: if request.auth != null && (
+        isAdminUser() ||
+        isOwner(resource.data.organizationId) ||
+        isOwner(resource.data.athleteId)
+      );
+      allow create: if request.auth != null && !isGuestUser() && validateOrgConnectionData();
+      allow update: if request.auth != null && isAdminUser();
+      allow delete: if request.auth != null && isAdminUser();
+    }
+
+    // Connection Interactions Collection
+    match /connectionInteractions/{interactionId} {
+      allow read, write: if request.auth != null && isAdminUser();
+    }
+
+    // Friend Requests Collection
+    match /friendRequests/{requestId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.requesterId) ||
+        isOwner(resource.data.recipientId)
+      );
+      allow create: if request.auth != null && !isGuestUser() && validateFriendRequestData();
+      allow update: if request.auth != null && !isGuestUser() && (
+        isOwner(resource.data.recipientId) ||
+        isOwner(resource.data.requesterId)
+      );
+      allow delete: if request.auth != null && !isGuestUser() && (
+        isOwner(resource.data.requesterId) ||
+        isOwner(resource.data.recipientId)
+      );
+    }
+
+    // Friendships Collection
+    match /friendships/{friendshipId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.user1) ||
+        isOwner(resource.data.user2)
+      );
+      allow create: if request.auth != null && !isGuestUser() && (
+        isOwner(request.resource.data.user1) ||
+        isOwner(request.resource.data.user2)
+      );
+      allow delete: if request.auth != null && !isGuestUser() && (
+        isOwner(resource.data.user1) ||
+        isOwner(resource.data.user2)
+      );
+    }
+
+    // Follows Collection
+    match /follows/{followId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && !isGuestUser() &&
+        isOwner(request.resource.data.followerId) &&
+        validateFollowData();
+      allow delete: if request.auth != null && !isGuestUser() &&
+        isOwner(resource.data.followerId);
+    }
+
+    // =====================================================================
+    // CONTENT COLLECTIONS (Posts, Videos, Stories, Moments)
+    // =====================================================================
+
+    // Posts Collection
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validatePostData();
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyEngagementChanged() ||
+        (!isGuestUser() && onlyCommentCountChanged())
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Comments Collection
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null && !isGuestUser() && validateCommentData();
+      allow update, delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Stories Collection
+    match /stories/{storyId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateStoryData();
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyViewDataChanged()
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Story Views Collection
+    match /storyViews/{viewId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        isOwner(request.resource.data.viewerId);
+      allow update: if request.auth != null &&
+        isOwner(resource.data.viewerId);
+    }
+
+    // Story Comments Collection
+    match /storyComments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null && !isGuestUser() && validateStoryCommentData();
+      allow update, delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Highlights Collection
+    match /highlights/{highlightId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateHighlightData();
+      allow update: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Videos Collection
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateVideoData();
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyEngagementChanged()
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Talent Videos Collection
+    match /talentVideos/{videoId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateTalentVideoData();
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyEngagementChanged() ||
+        isAdminUser()
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Moments Collection (Reels/Short Videos)
+    match /moments/{momentId} {
+      allow read: if (resource.data.isActive == true && resource.data.moderationStatus == 'approved') ||
+                     (request.auth != null && isOwner(resource.data.userId));
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId) &&
+        validateMomentData();
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyMomentEngagementChanged()
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Moment Interactions Collection
+    match /interactions/{interactionId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        isOwner(request.resource.data.userId);
+    }
+
+    // =====================================================================
+    // SHARING & GROUPS COLLECTIONS
+    // =====================================================================
+
+    // Shares Collection
+    match /shares/{shareId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.sharerId) ||
+        isOwner(resource.data.originalAuthorId) ||
+        (resource.data.shareType == 'friends' && resource.data.targets.hasAny([request.auth.uid]))
+      );
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.sharerId) &&
+        validateShareData();
+      allow update: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.sharerId);
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.sharerId);
+    }
+
+    // Groups Collection
+    match /groups/{groupId} {
+      allow read: if resource.data.privacy == 'public' || (
+        request.auth != null &&
+        resource.data.members.hasAny([request.auth.uid])
+      );
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.auth.uid) &&
+        validateGroupData();
+      allow update: if request.auth != null &&
+        !isGuestUser() &&
+        resource.data.admins.hasAny([request.auth.uid]);
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        resource.data.admins.hasAny([request.auth.uid]);
+    }
+
+    // =====================================================================
+    // COMMUNICATION COLLECTIONS
+    // =====================================================================
+
+    // Messages Collection
+    match /messages/{messageId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.senderId) ||
+        isOwner(resource.data.receiverId)
+      );
+      allow create: if request.auth != null && !isGuestUser() && validateMessageData();
+      allow update: if request.auth != null && !isGuestUser() && (
+        isOwner(resource.data.senderId) ||
+        isOwner(resource.data.receiverId)
+      );
+      allow delete: if request.auth != null && !isGuestUser() && isOwner(resource.data.senderId);
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.receiverId) ||
+        isOwner(resource.data.senderId) ||
+        (resource.data.relatedUserId != null && isOwner(resource.data.relatedUserId))
+      );
+      allow create: if request.auth != null && (
+        (!isGuestUser() && validateNotificationData()) ||
+        isAdminUser()
+      );
+      allow update: if request.auth != null && isOwner(resource.data.receiverId);
+      allow delete: if request.auth != null && (
+        isOwner(resource.data.receiverId) ||
+        isOwner(resource.data.senderId)
+      );
+    }
+
+    // =====================================================================
+    // MODERATION & REPORTING COLLECTIONS
+    // =====================================================================
+
+    // Content Reports Collection
+    match /contentReports/{reportId} {
+      allow read: if request.auth != null && (
+        isOwner(resource.data.reporterId) ||
+        isAdminUser()
+      );
+      allow create: if request.auth != null && !isGuestUser() && validateReportData();
+      allow update, delete: if request.auth != null && isAdminUser();
+    }
+
+    // Moderation Logs Collection
+    match /moderationLogs/{logId} {
+      allow read, write: if request.auth != null && isAdminUser();
+    }
+
+    // =====================================================================
+    // VERIFICATION COLLECTIONS
+    // =====================================================================
+
+    // Verification Requests Collection
+    match /verificationRequests/{requestId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(request.resource.data.userId);
+      allow update: if request.auth != null && (
+        isOwner(resource.data.userId) ||
+        onlyVerificationDataChanged()
+      );
+      allow delete: if request.auth != null &&
+        !isGuestUser() &&
+        isOwner(resource.data.userId);
+    }
+
+    // Verifications Collection
+    match /verifications/{verificationId} {
+      allow read: if true;
+      allow create: if validateVerificationData();
+      allow update, delete: if false;
+    }
+
+    // =====================================================================
+    // VALIDATION FUNCTIONS
+    // =====================================================================
+
+    function validateOrgConnectionData() {
+      return request.resource.data.keys().hasAll(['organizationId', 'organizationName', 'athleteId', 'athleteName', 'status', 'requestDate'])
+        && request.resource.data.organizationId is string
+        && request.resource.data.organizationName is string
+        && request.resource.data.athleteId is string
+        && request.resource.data.athleteName is string
+        && request.resource.data.status in ['pending', 'approved', 'rejected']
+        && request.resource.data.requestDate != null;
+    }
+
+    function validatePostData() {
+      return request.resource.data.keys().hasAll(['caption', 'userId', 'userDisplayName', 'timestamp'])
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 1000
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string;
+    }
+
+    function validateCommentData() {
+      return request.resource.data.keys().hasAll(['text', 'userId', 'userDisplayName', 'timestamp', 'contentId', 'contentType'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.contentId is string
+        && request.resource.data.contentType in ['post', 'story', 'moment']
+        && isOwner(request.resource.data.userId);
+    }
+
+    function validateFriendRequestData() {
+      return request.resource.data.keys().hasAll(['requesterId', 'recipientId', 'requesterName', 'status', 'timestamp'])
+        && request.resource.data.requesterId is string
+        && request.resource.data.recipientId is string
+        && request.resource.data.requesterName is string
+        && request.resource.data.status in ['pending', 'accepted', 'rejected']
+        && isOwner(request.resource.data.requesterId);
+    }
+
+    function validateFollowData() {
+      return request.resource.data.keys().hasAll(['followerId', 'followerName', 'followingId', 'followingName', 'timestamp'])
+        && request.resource.data.followerId is string
+        && request.resource.data.followerName is string
+        && request.resource.data.followingId is string
+        && request.resource.data.followingName is string
+        && isOwner(request.resource.data.followerId);
+    }
+
+    function validateStoryData() {
+      return request.resource.data.keys().hasAll(['userId', 'userDisplayName', 'mediaType', 'mediaUrl', 'caption', 'timestamp', 'expiresAt'])
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.mediaType in ['image', 'video']
+        && request.resource.data.mediaUrl is string
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 200;
+    }
+
+    function validateStoryCommentData() {
+      return request.resource.data.keys().hasAll(['storyId', 'userId', 'userDisplayName', 'text', 'timestamp'])
+        && request.resource.data.storyId is string
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 500
+        && isOwner(request.resource.data.userId);
+    }
+
+    function validateHighlightData() {
+      return request.resource.data.keys().hasAll(['userId', 'title', 'storyIds'])
+        && request.resource.data.userId is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 30
+        && request.resource.data.storyIds is list;
+    }
+
+    function validateVideoData() {
+      return request.resource.data.keys().hasAll(['userId', 'userDisplayName', 'title', 'videoUrl', 'timestamp'])
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.videoUrl is string;
+    }
+
+    function validateTalentVideoData() {
+      return request.resource.data.keys().hasAll(['userId', 'userDisplayName', 'videoUrl', 'fileName', 'uploadedAt'])
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.videoUrl is string
+        && request.resource.data.fileName is string
+        && isOwner(request.resource.data.userId);
+    }
+
+    function validateMomentData() {
+      return request.resource.data.keys().hasAll(['userId', 'userDisplayName', 'videoUrl', 'caption', 'duration', 'createdAt', 'isActive', 'moderationStatus'])
+        && request.resource.data.userId is string
+        && request.resource.data.userDisplayName is string
+        && request.resource.data.videoUrl is string
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 500
+        && request.resource.data.duration is number
+        && request.resource.data.isActive is bool
+        && request.resource.data.moderationStatus in ['pending', 'approved', 'rejected']
+        && isOwner(request.resource.data.userId);
+    }
+
+    function onlyMomentEngagementChanged() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(['engagement', 'updatedAt']) ||
+             affectedKeys.hasOnly(['engagement']) ||
+             affectedKeys.hasOnly(['updatedAt']);
+    }
+
+    function validateShareData() {
+      return request.resource.data.keys().hasAll(['postId', 'originalAuthorId', 'sharerId', 'shareType', 'targets', 'timestamp', 'privacy'])
+        && request.resource.data.postId is string
+        && request.resource.data.originalAuthorId is string
+        && request.resource.data.sharerId is string
+        && isOwner(request.resource.data.sharerId)
+        && request.resource.data.shareType in ['friends', 'feed', 'groups']
+        && request.resource.data.targets is list
+        && request.resource.data.targets.size() > 0
+        && request.resource.data.targets.size() <= 50
+        && request.resource.data.privacy in ['public', 'friends', 'private']
+        && request.resource.data.timestamp != null;
+    }
+
+    function validateGroupData() {
+      return request.resource.data.keys().hasAll(['name', 'description', 'members', 'admins', 'privacy', 'postingPermissions', 'createdAt', 'memberCount'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 500
+        && request.resource.data.members is list
+        && request.resource.data.admins is list
+        && request.resource.data.admins.size() > 0
+        && request.resource.data.privacy in ['public', 'private']
+        && request.resource.data.postingPermissions in ['all', 'admins', 'approved']
+        && request.resource.data.memberCount is number
+        && request.resource.data.memberCount >= 0;
+    }
+
+    function validateMessageData() {
+      return request.resource.data.keys().hasAll(['senderId', 'receiverId', 'message', 'timestamp'])
+        && request.resource.data.senderId is string
+        && request.resource.data.receiverId is string
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 1000
+        && isOwner(request.resource.data.senderId);
+    }
+
+    function validateNotificationData() {
+      return request.resource.data.keys().hasAll(['type', 'senderId', 'senderName', 'receiverId', 'message', 'timestamp'])
+        && request.resource.data.type is string
+        && request.resource.data.senderId is string
+        && request.resource.data.senderName is string
+        && request.resource.data.receiverId is string
+        && request.resource.data.message is string
+        && (isOwner(request.resource.data.senderId) || (request.resource.data.type == 'test' && isOwner(request.resource.data.receiverId)));
+    }
+
+    function validateReportData() {
+      return request.resource.data.keys().hasAll(['contentId', 'contentType', 'reporterId', 'reasons', 'timestamp'])
+        && request.resource.data.contentId is string
+        && request.resource.data.contentType in ['post', 'message', 'user', 'comment']
+        && request.resource.data.reporterId is string
+        && isOwner(request.resource.data.reporterId)
+        && request.resource.data.reasons is list
+        && request.resource.data.reasons.size() > 0
+        && request.resource.data.timestamp != null;
+    }
+
+    function validateVerificationData() {
+      return request.resource.data.keys().hasAll(['verificationId', 'userId', 'verifiedAt'])
+        && request.resource.data.verificationId is string
+        && request.resource.data.userId is string
+        && request.resource.data.verifiedAt != null;
+    }
+
+    function onlyViewDataChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'viewers', 'likes', 'likesCount']);
+    }
+
+    function onlyVerificationDataChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verificationCount', 'verificationIPs', 'verifiedBy', 'status', 'verifiedAt']);
+    }
+
+    function validateSubmissionData() {
+      return request.resource.data.keys().hasAll(['eventId', 'userId', 'userName', 'videoUrl', 'title', 'status'])
+        && request.resource.data.eventId is string
+        && request.resource.data.userId is string
+        && request.resource.data.userName is string
+        && request.resource.data.videoUrl is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.status in ['draft', 'submitted']
+        && isOwner(request.resource.data.userId);
+    }
+
+    function onlySubmissionDataChanged() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(['videoUrl', 'thumbnail', 'title', 'description', 'status', 'updatedAt']) ||
+             affectedKeys.hasOnly(['videoUrl', 'thumbnail', 'title', 'description', 'status']) ||
+             affectedKeys.hasOnly(['videoUrl', 'title', 'status']) ||
+             affectedKeys.hasOnly(['status', 'updatedAt']) ||
+             affectedKeys.hasOnly(['status']);
+    }
+
+    function onlyRankAndPrizeChanged() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(['rank', 'prize', 'updatedAt']) ||
+             affectedKeys.hasOnly(['rank', 'prize']) ||
+             affectedKeys.hasOnly(['rank']) ||
+             affectedKeys.hasOnly(['prize']);
+    }
+
+  }
+}
+
+// =====================================================================
+// FIRESTORE INDEXES CONFIGURATION
+// =====================================================================
+// The following indexes should be created in Firebase Console for optimal performance:
+
+/*
+COLLECTION: posts
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: isActive (Ascending) + createdAt (Descending)
+
+COLLECTION: users
+- Index 1: role (Ascending) + createdAt (Descending)
+- Index 2: isVerified (Ascending) + createdAt (Descending)
+
+COLLECTION: comments
+- Index 1: postId (Ascending) + createdAt (Descending)
+- Index 2: userId (Ascending) + createdAt (Descending)
+
+COLLECTION: stories
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: expiresAt (Ascending)
+
+COLLECTION: videos
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: isActive (Ascending) + createdAt (Descending)
+
+COLLECTION: talentVideos
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: status (Ascending) + createdAt (Descending)
+
+COLLECTION: moments
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: isActive (Ascending) + moderationStatus (Ascending) + createdAt (Descending)
+
+COLLECTION: organizationConnectionRequests
+- Index 1: status (Ascending) + requestDate (Descending)
+- Index 2: organizationId (Ascending) + status (Ascending)
+- Index 3: athleteId (Ascending) + status (Ascending)
+
+COLLECTION: friendships
+- Index 1: user1 (Ascending) + createdAt (Descending)
+- Index 2: user2 (Ascending) + createdAt (Descending)
+
+COLLECTION: follows
+- Index 1: followerId (Ascending) + createdAt (Descending)
+- Index 2: followingId (Ascending) + createdAt (Descending)
+
+COLLECTION: messages
+- Index 1: senderId (Ascending) + createdAt (Descending)
+- Index 2: receiverId (Ascending) + createdAt (Descending)
+- Index 3: conversationId (Ascending) + createdAt (Descending)
+
+COLLECTION: notifications
+- Index 1: receiverId (Ascending) + createdAt (Descending)
+- Index 2: type (Ascending) + createdAt (Descending)
+
+COLLECTION: groups
+- Index 1: privacy (Ascending) + createdAt (Descending)
+- Index 2: members (Array Contains)
+
+COLLECTION: shares
+- Index 1: sharerId (Ascending) + createdAt (Descending)
+- Index 2: originalAuthorId (Ascending) + createdAt (Descending)
+
+COLLECTION: events
+- Index 1: isActive (Ascending) + date (Ascending)
+
+COLLECTION: contentReports
+- Index 1: status (Ascending) + createdAt (Descending)
+- Index 2: contentType (Ascending) + createdAt (Descending)
+
+COLLECTION: verificationRequests
+- Index 1: userId (Ascending) + createdAt (Descending)
+- Index 2: status (Ascending) + createdAt (Descending)
+
+COLLECTION: eventSubmissions
+- Index 1: eventId (Ascending) + uploadedAt (Descending)
+- Index 2: eventId (Ascending) + status (Ascending) + uploadedAt (Descending)
+- Index 3: userId (Ascending) + uploadedAt (Descending)
+
+*/

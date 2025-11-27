@@ -3,18 +3,21 @@ import { BaseService, FirestoreFilter } from './baseService';
 import { COLLECTIONS } from '../../constants/firebase';
 import { storage, db } from '../../lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { 
-  doc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  collection, 
-  where, 
-  orderBy, 
+import {
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  collection,
+  where,
+  orderBy,
   limit as firestoreLimit,
   startAfter,
   DocumentSnapshot,
-  Timestamp
+  Timestamp,
+  arrayUnion,
+  increment,
+  updateDoc
 } from 'firebase/firestore';
 import { Post, CreatePostData, Like, Comment as PostComment, MediaType } from '../../types/models/post';
 import { 
@@ -476,15 +479,11 @@ class PostsService extends BaseService<Post> {
   }
 
   /**
-   * Add comment to post
+   * Add comment to post using atomic arrayUnion operation
+   * This ensures real-time listeners fire when comments are added
    */
   async addComment(postId: string, commentData: CommentData): Promise<PostComment> {
     try {
-      const post = await this.getById(postId);
-      if (!post) {
-        throw new Error('Post not found');
-      }
-
       const comment: PostComment = {
         id: `comment_${Date.now()}`,
         text: commentData.text,
@@ -496,19 +495,24 @@ class PostsService extends BaseService<Post> {
         replies: [],
       };
 
-      const updatedComments = [...((post.comments as unknown[]) || []), comment];
+      console.log('📝 Creating comment object:', comment);
 
-      // Ensure engagement metadata is accurate
-      await this.update(postId, {
-        comments: updatedComments as unknown,
-        commentsCount: updatedComments.length,
-        likesCount: (post.likes as unknown[] || []).length,
-      } as Partial<Post>);
+      // Use atomic arrayUnion operation to append comment
+      // This triggers onSnapshot listeners automatically
+      const postRef = doc(db, COLLECTIONS.POSTS, postId);
+      console.log('📤 Sending update to post:', postId);
 
-      console.log('💬 Comment added to post:', postId);
+      await updateDoc(postRef, {
+        comments: arrayUnion(comment),
+        commentsCount: increment(1),
+      });
+
+      console.log('✅ Comment successfully added to post:', postId);
+      console.log('✅ Comment data:', comment);
       return comment;
     } catch (error) {
-      console.error('❌ Error adding comment:', error);
+      console.error('❌ Error adding comment to post:', postId);
+      console.error('❌ Error details:', error);
       throw error;
     }
   }

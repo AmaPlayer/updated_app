@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Camera, Save, X, LogOut, AlertCircle } from 'lucide-react';
+import { User, Mail, Camera, Save, X, LogOut, AlertCircle, Lock, LockOpen } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -35,6 +35,43 @@ const AccountSection: React.FC = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [nameChangeCount, setNameChangeCount] = useState<number>(0);
   const [originalName, setOriginalName] = useState<string>('');
+
+  // Helper function to check if user has a password set
+  const hasPassword = (): boolean => {
+    if (!currentUser?.providerData) return false;
+    return currentUser.providerData.some(provider => provider.providerId === 'password');
+  };
+
+  // Helper function to get account type
+  const getAccountType = (): string => {
+    if (!currentUser?.providerData || currentUser.providerData.length === 0) {
+      return 'Email/Password Account';
+    }
+
+    return currentUser.providerData.map(provider => {
+      switch (provider.providerId) {
+        case 'google.com':
+          return 'Google Account';
+        case 'apple.com':
+          return 'Apple Account';
+        case 'password':
+          return 'Email/Password Account';
+        default:
+          return 'Social Account';
+      }
+    }).join(', ');
+  };
+
+  // Helper function to check if user is social-only (no password)
+  const isSocialOnly = (): boolean => {
+    if (!currentUser?.providerData || currentUser.providerData.length === 0) {
+      return false;
+    }
+    const hasSocialProvider = currentUser.providerData.some(provider =>
+      provider.providerId === 'google.com' || provider.providerId === 'apple.com'
+    );
+    return hasSocialProvider && !hasPassword();
+  };
 
   const form = useSettingsForm<AccountFormData>({
     initialValues: {
@@ -321,21 +358,33 @@ const AccountSection: React.FC = () => {
           <div className="field-group">
             <label className="field-label">Account Type</label>
             <div className="field-value">
-              {currentUser?.providerData && currentUser.providerData.length > 0
-                ? currentUser.providerData.map(provider => {
-                    switch (provider.providerId) {
-                      case 'google.com':
-                        return 'Google Account';
-                      case 'apple.com':
-                        return 'Apple Account';
-                      case 'password':
-                        return 'Email/Password Account';
-                      default:
-                        return 'Social Account';
-                    }
-                  }).join(', ')
-                : 'Email/Password Account'
-              }
+              {getAccountType()}
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">
+              {hasPassword() ? <Lock size={16} /> : <LockOpen size={16} />}
+              Password Status
+            </label>
+            <div className="field-value">
+              {hasPassword() ? (
+                <span className="password-status password-set">
+                  ✓ Password is set
+                </span>
+              ) : (
+                <span className="password-status password-not-set">
+                  {isSocialOnly()
+                    ? '⚠ No password set (social login only)'
+                    : 'No password required'
+                  }
+                </span>
+              )}
+              {isSocialOnly() && (
+                <span className="password-status-hint">
+                  Set a password in the Password Management section to enable email/password login
+                </span>
+              )}
             </div>
           </div>
         </div>

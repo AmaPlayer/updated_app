@@ -1,63 +1,94 @@
 import React, { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import { organizationConnectionService } from '../../services/api';
-import { OrganizationConnectionRequest } from '../../types/models/organizationConnection';
+import { OrganizationConnection } from '../../types/models/organizationConnection';
+import { useAuth } from '../../contexts/AuthContext';
 import './ConnectionRequestsSection.css';
 
 interface ConnectionRequestsSectionProps {
-  athleteId: string;
+  userId: string;
 }
 
 export const ConnectionRequestsSection: React.FC<ConnectionRequestsSectionProps> = ({
-  athleteId
+  userId
 }) => {
-  const [pendingRequests, setPendingRequests] = useState<OrganizationConnectionRequest[]>([]);
-  const [approvedConnections, setApprovedConnections] = useState<OrganizationConnectionRequest[]>([]);
+  const { currentUser } = useAuth();
+  const [pendingRequests, setPendingRequests] = useState<OrganizationConnection[]>([]);
+  const [acceptedConnections, setAcceptedConnections] = useState<OrganizationConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPending, setShowPending] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadConnectionRequests();
-  }, [athleteId]);
+  }, [userId]);
 
   const loadConnectionRequests = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load pending requests
-      const pending = await organizationConnectionService.getAthleteConnectionRequests(
-        athleteId,
-        'pending'
-      );
+      // Load pending requests where current user is the recipient
+      const pending = await organizationConnectionService.getIncomingPendingRequests(userId);
 
-      // Load approved connections
-      const approved = await organizationConnectionService.getApprovedConnectionsForAthlete(
-        athleteId
-      );
+      // Load accepted connections where current user is the recipient
+      const accepted = await organizationConnectionService.getAcceptedConnections(userId);
 
       setPendingRequests(pending);
-      setApprovedConnections(
-        approved.map(conn => ({
-          id: conn.id,
-          organizationId: conn.organizationId,
-          organizationName: conn.organizationName,
-          athleteId: athleteId,
-          athleteName: conn.athleteName || '',
-          status: 'approved' as const,
-          requestDate: conn.approvalDate || new Date(),
-          approvalDate: conn.approvalDate,
-          approvedByAdminId: conn.approvedByAdminId,
-          approvedByAdminName: conn.approvedByAdminName,
-          notes: conn.notes
-        } as unknown as OrganizationConnectionRequest))
-      );
+      setAcceptedConnections(accepted);
     } catch (err: any) {
       console.error('❌ Error loading connection requests:', err);
       setError(err.message || 'Failed to load connection requests');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAcceptRequest = async (connectionId: string, connection: OrganizationConnection) => {
+    if (!currentUser) return;
+
+    try {
+      setProcessingId(connectionId);
+      setError(null);
+
+      await organizationConnectionService.acceptConnectionRequest({
+        connectionId,
+        acceptedByUserId: currentUser.uid,
+        acceptedByName: currentUser.displayName || 'User'
+      });
+
+      // Remove from pending and add to accepted
+      setPendingRequests(prev => prev.filter(req => req.id !== connectionId));
+      setAcceptedConnections(prev => [...prev, { ...connection, status: 'accepted' }]);
+    } catch (err: any) {
+      console.error('❌ Error accepting request:', err);
+      setError(err.message || 'Failed to accept connection request');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectRequest = async (connectionId: string) => {
+    if (!currentUser) return;
+
+    try {
+      setProcessingId(connectionId);
+      setError(null);
+
+      await organizationConnectionService.rejectConnectionRequest({
+        connectionId,
+        rejectedByUserId: currentUser.uid,
+        rejectedByName: currentUser.displayName || 'User'
+      });
+
+      // Remove from pending
+      setPendingRequests(prev => prev.filter(req => req.id !== connectionId));
+    } catch (err: any) {
+      console.error('❌ Error rejecting request:', err);
+      setError(err.message || 'Failed to reject connection request');
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -76,24 +107,33 @@ export const ConnectionRequestsSection: React.FC<ConnectionRequestsSectionProps>
     }
   };
 
+  const getSenderInfo = (connection: OrganizationConnection) => {
+    return {
+      name: connection.senderName,
+      role: connection.senderRole,
+      photoURL: connection.senderPhotoURL
+    };
+  };
+
   if (loading) {
-    return <div className="connection-section loading">Loading organization requests...</div>;
+    return <div className="connection-section loading">Loading connection requests...</div>;
   }
 
-  const hasRequests = pendingRequests.length > 0 || approvedConnections.length > 0;
+  const hasRequests = pendingRequests.length > 0 || acceptedConnections.length > 0;
+  const sender = pendingRequests.length > 0 ? getSenderInfo(pendingRequests[0]) : null;
 
   return (
     <div className="connection-section">
       <div className="connection-section-header">
-        <h3>📊 Organization Connections</h3>
-        <p className="subtitle">Track organization and coaching requests and approved connections</p>
+        <h3>🔗 Connection Requests</h3>
+        <p className="subtitle">Manage pending connection requests from organizations and coaches</p>
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
       {!hasRequests ? (
         <div className="no-connections">
-          <p>No organization connection requests or approved connections yet.</p>
+          <p>No pending connection requests or accepted connections yet.</p>
         </div>
       ) : (
         <>
@@ -102,8 +142,8 @@ export const ConnectionRequestsSection: React.FC<ConnectionRequestsSectionProps>
             <div className="connection-subsection">
               <div className="subsection-header" onClick={() => setShowPending(!showPending)}>
                 <h4>
-                  <span className="icon">⏳</span>
-                  Pending Approvals ({pendingRequests.length})
+                  <span className="icon">📬</span>
+                  Pending Requests ({pendingRequests.length})
                 </h4>
                 <span className={`toggle ${showPending ? 'open' : ''}`}>▼</span>
               </div>
@@ -114,20 +154,40 @@ export const ConnectionRequestsSection: React.FC<ConnectionRequestsSectionProps>
                     <div key={request.id} className="connection-card pending">
                       <div className="card-header">
                         <div className="org-info">
-                          <h5>{request.organizationName}</h5>
+                          <h5>{request.senderName}</h5>
+                          <p className="sender-role">
+                            {request.senderRole === 'organization' ? '🏢 Organization' : '👨‍🏫 Coach'}
+                          </p>
                           <p className="request-date">
-                            Requested on {formatDate(request.requestDate)}
+                            Requested on {formatDate(request.createdAt)}
                           </p>
                         </div>
                         <div className="status-badge pending">
-                          <span>⏳</span> Waiting for Admin Approval
+                          <span>⏳</span> Pending
                         </div>
                       </div>
                       <div className="card-body">
                         <p className="info-text">
-                          This organization has requested to connect with you. An admin must
-                          approve this request before you can start messaging.
+                          {request.senderRole === 'organization'
+                            ? `${request.senderName} wants to connect with you to collaborate and message.`
+                            : `${request.senderName} wants to connect with you for coaching and collaboration.`}
                         </p>
+                        <div className="connection-actions">
+                          <button
+                            className="btn btn-accept"
+                            onClick={() => handleAcceptRequest(request.id, request)}
+                            disabled={processingId === request.id}
+                          >
+                            {processingId === request.id ? '✓ Accepting...' : '✓ Accept'}
+                          </button>
+                          <button
+                            className="btn btn-reject"
+                            onClick={() => handleRejectRequest(request.id)}
+                            disabled={processingId === request.id}
+                          >
+                            {processingId === request.id ? '✕ Rejecting...' : '✕ Reject'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -136,42 +196,39 @@ export const ConnectionRequestsSection: React.FC<ConnectionRequestsSectionProps>
             </div>
           )}
 
-          {/* Approved Connections */}
-          {approvedConnections.length > 0 && (
+          {/* Accepted Connections */}
+          {acceptedConnections.length > 0 && (
             <div className="connection-subsection">
               <div className="subsection-header">
                 <h4>
                   <span className="icon">✅</span>
-                  Approved Connections ({approvedConnections.length})
+                  Connected ({acceptedConnections.length})
                 </h4>
               </div>
 
               <div className="connection-list">
-                {approvedConnections.map(connection => (
-                  <div key={connection.id} className="connection-card approved">
+                {acceptedConnections.map(connection => (
+                  <div key={connection.id} className="connection-card accepted">
                     <div className="card-header">
                       <div className="org-info">
-                        <h5>{connection.organizationName}</h5>
-                        <p className="approval-date">
-                          Approved on {formatDate(connection.approvalDate)}
+                        <h5>{connection.senderName}</h5>
+                        <p className="sender-role">
+                          {connection.senderRole === 'organization' ? '🏢 Organization' : '👨‍🏫 Coach'}
+                        </p>
+                        <p className="accepted-date">
+                          Connected on {formatDate(connection.acceptedAt)}
                         </p>
                       </div>
-                      <div className="status-badge approved">
+                      <div className="status-badge accepted">
                         <span>✓</span> Connected
                       </div>
                     </div>
                     <div className="card-body">
                       <p className="info-text">
-                        You are now connected with {connection.organizationName}. You can message
-                        and communicate directly.
+                        You are now connected with {connection.senderName}. You can message and
+                        communicate directly.
                       </p>
-                      {connection.notes && (
-                        <div className="admin-notes">
-                          <p className="label">📝 Admin Notes:</p>
-                          <p className="notes-text">{connection.notes}</p>
-                        </div>
-                      )}
-                      <button className="btn-message">
+                      <button className="btn btn-message">
                         💬 Open Chat
                       </button>
                     </div>

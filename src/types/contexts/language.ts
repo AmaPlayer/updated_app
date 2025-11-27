@@ -121,6 +121,11 @@ export type TranslationKey =
   | 'bio'
   | 'location'
   | 'website'
+  | 'name'
+  | 'age'
+  | 'heightCm'
+  | 'weightKg'
+  | 'personalDetails'
   // Comments
   | 'writeComment'
   | 'comments'

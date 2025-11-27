@@ -159,18 +159,14 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
       
       // Attempt to sign in with email and password
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
+
       // Log successful login for debugging
-      authErrorHandler.logAuthError(
-        new Error('Login successful'), 
-        'AuthContext-Login', 
-        { 
-          userId: userCredential.user.uid,
-          persistence: keepLoggedIn ? 'local' : 'session',
-          method: 'email_password'
-        }
-      );
-      
+      console.log('✅ Login successful:', {
+        userId: userCredential.user.uid,
+        persistence: keepLoggedIn ? 'local' : 'session',
+        method: 'email_password'
+      });
+
       return userCredential;
     } catch (error) {
       // Log the error with context
@@ -213,6 +209,59 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
         // Attach the credential and email to the error so UI can handle it
         error.credential = GoogleAuthProvider.credentialFromError(error);
         error.email = error.customData?.email;
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Reauthenticate with Google OAuth (for identity verification)
+   * Used when user needs to verify their identity to change password
+   * Triggers Google OAuth popup without changing authentication state
+   */
+  async function reauthenticateWithGoogle(): Promise<User> {
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    const provider = new GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+
+    console.log('🔵 Google Reauthentication: Showing OAuth popup...');
+
+    try {
+      // Sign in with Google popup (not linking, just reauthentication)
+      const result = await signInWithPopup(auth, provider);
+      console.log('✅ Google reauthentication successful!', {
+        userId: currentUser.uid,
+        email: result.user.email
+      });
+
+      return currentUser; // Return the current authenticated user
+    } catch (error: any) {
+      console.error('❌ Google reauthentication failed:', error);
+
+      authErrorHandler.logAuthError(error, 'AuthContext-ReauthGoogle', {
+        userId: currentUser.uid,
+        errorCode: error.code
+      });
+
+      // Handle specific error codes
+      if (error.code === 'auth/popup-blocked') {
+        throw new Error('Google popup was blocked. Please allow popups and try again.');
+      }
+
+      if (error.code === 'auth/user-cancelled-login') {
+        throw new Error('Google authentication was cancelled. Please try again.');
+      }
+
+      if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error('Authentication was cancelled. Please try again.');
       }
 
       throw error;
@@ -282,6 +331,56 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
     provider.addScope('email');
     provider.addScope('name');
     return signInWithPopup(auth, provider);
+  }
+
+  /**
+   * Reauthenticate with Apple OAuth (for identity verification)
+   * Used when user needs to verify their identity to change password
+   * Triggers Apple OAuth popup without changing authentication state
+   */
+  async function reauthenticateWithApple(): Promise<User> {
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    const provider = new OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+
+    console.log('🍎 Apple Reauthentication: Showing OAuth popup...');
+
+    try {
+      // Sign in with Apple popup (not linking, just reauthentication)
+      const result = await signInWithPopup(auth, provider);
+      console.log('✅ Apple reauthentication successful!', {
+        userId: currentUser.uid,
+        email: result.user.email
+      });
+
+      return currentUser; // Return the current authenticated user
+    } catch (error: any) {
+      console.error('❌ Apple reauthentication failed:', error);
+
+      authErrorHandler.logAuthError(error, 'AuthContext-ReauthApple', {
+        userId: currentUser.uid,
+        errorCode: error.code
+      });
+
+      // Handle specific error codes
+      if (error.code === 'auth/popup-blocked') {
+        throw new Error('Apple popup was blocked. Please allow popups and try again.');
+      }
+
+      if (error.code === 'auth/user-cancelled-login') {
+        throw new Error('Apple authentication was cancelled. Please try again.');
+      }
+
+      if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error('Authentication was cancelled. Please try again.');
+      }
+
+      throw error;
+    }
   }
 
   function logout(): Promise<void> {
@@ -391,11 +490,7 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
       }
       
       await currentUser.getIdToken(true);
-      authErrorHandler.logAuthError(
-        new Error('Token refresh successful'), 
-        'AuthContext-RefreshToken', 
-        { userId: currentUser.uid }
-      );
+      console.log('✅ Token refreshed successfully:', { userId: currentUser.uid });
     } catch (error) {
       authErrorHandler.logAuthError(error, 'AuthContext-RefreshToken');
       throw error;
@@ -451,21 +546,17 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
 
         try {
           await updatePassword(currentUser, newPassword);
-          
-          authErrorHandler.logAuthError(
-            new Error('Password set successfully for social user'), 
-            'AuthContext-ChangePassword', 
-            { 
-              userId: currentUser.uid, 
-              userType: 'social',
-              hasEmailProvider: hasEmailProvider
-            }
-          );
-          
-          return { 
+
+          console.log('✅ Password set successfully for social user:', {
+            userId: currentUser.uid,
+            userType: 'social',
+            hasEmailProvider: hasEmailProvider
+          });
+
+          return {
             success: true,
-            suggestedAction: hasEmailProvider ? 
-              'Password updated successfully' : 
+            suggestedAction: hasEmailProvider ?
+              'Password updated successfully' :
               'Password set successfully. You can now use email/password to log in.'
           };
         } catch (error: unknown) {
@@ -531,14 +622,13 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
 
           // Step 2: Update to new password
           await updatePassword(currentUser, newPassword);
-          
-          authErrorHandler.logAuthError(
-            new Error('Password change successful for email user'), 
-            'AuthContext-ChangePassword', 
-            { userId: currentUser.uid, userType: 'email' }
-          );
-          
-          return { 
+
+          console.log('✅ Password change successful for email user:', {
+            userId: currentUser.uid,
+            userType: 'email'
+          });
+
+          return {
             success: true,
             suggestedAction: 'Password updated successfully'
           };
@@ -604,14 +694,135 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
   async function resetPassword(email: string): Promise<void> {
     try {
       await sendPasswordResetEmail(auth, email);
-      authErrorHandler.logAuthError(
-        new Error('Password reset email sent successfully'),
-        'AuthContext-ResetPassword',
-        { email }
-      );
+      console.log('✅ Password reset email sent successfully:', { email });
     } catch (error: unknown) {
       authErrorHandler.logAuthError(error, 'AuthContext-ResetPassword', { email });
       throw error;
+    }
+  }
+
+  /**
+   * Change password with OAuth or email fallback for alternative verification
+   *
+   * Flow:
+   * 1. User enters desired new password in form
+   * 2. User tries current password first
+   * 3. If wrong/forgotten, user can verify with:
+   *    - OAuth (Google/Apple): Popup reauthentication
+   *    - Email users: Password reset email link
+   * 4. After verification, password updates to desired new password
+   */
+  async function changePasswordWithOAuthFallback(
+    newPassword: string,
+    oauthProvider?: string
+  ): Promise<PasswordChangeResult> {
+    try {
+      if (!currentUser) {
+        return {
+          success: false,
+          error: 'No authenticated user found',
+          suggestedAction: 'Please log in and try again'
+        };
+      }
+
+      // Validate new password before attempting change
+      const { validatePassword } = await import('../utils/validation/validation');
+      const passwordValidation = validatePassword(newPassword);
+
+      if (!passwordValidation.isValid) {
+        return {
+          success: false,
+          error: passwordValidation.error || 'Password does not meet requirements',
+          suggestedAction: passwordValidation.suggestions?.[0]
+        };
+      }
+
+      // Handle OAuth-based verification (Google or Apple)
+      if (oauthProvider) {
+        try {
+          console.log(`🔐 Reauthenticating with ${oauthProvider} for password change...`);
+
+          // Reauthenticate with appropriate OAuth provider
+          if (oauthProvider === 'google.com') {
+            await reauthenticateWithGoogle();
+          } else if (oauthProvider === 'apple.com') {
+            await reauthenticateWithApple();
+          } else {
+            return {
+              success: false,
+              error: 'Unsupported authentication provider',
+              suggestedAction: 'Please use Google or Apple authentication'
+            };
+          }
+
+          // After successful OAuth reauthentication, update password
+          await updatePassword(currentUser, newPassword);
+
+          console.log('✅ Password changed successfully with OAuth verification:', {
+            userId: currentUser.uid,
+            provider: oauthProvider
+          });
+
+          return {
+            success: true,
+            suggestedAction: 'Password updated successfully. You can now use your new password to log in.'
+          };
+        } catch (error: unknown) {
+          console.error(`❌ OAuth reauthentication failed:`, error);
+
+          authErrorHandler.logAuthError(error, 'AuthContext-ChangePasswordWithOAuthFallback', {
+            userId: currentUser.uid,
+            provider: oauthProvider,
+            step: 'oauth_reauthentication'
+          });
+
+          const errorCode = (error as { code?: string }).code;
+          const errorMessage = (error as { message?: string }).message || String(error);
+
+          // Handle popup-blocked errors
+          if (errorCode === 'auth/popup-blocked') {
+            return {
+              success: false,
+              error: 'Browser popup was blocked',
+              suggestedAction: 'Please allow popups for this site and try again'
+            };
+          }
+
+          // Handle user cancellation
+          if (
+            errorCode === 'auth/user-cancelled-login' ||
+            errorCode === 'auth/cancelled-popup-request' ||
+            errorMessage.includes('cancelled')
+          ) {
+            return {
+              success: false,
+              error: 'Authentication was cancelled',
+              suggestedAction: 'Please try again'
+            };
+          }
+
+          // Generic OAuth error
+          return {
+            success: false,
+            error: `${oauthProvider} authentication failed`,
+            suggestedAction: 'Please try again or contact support'
+          };
+        }
+      } else {
+        // No OAuth provider specified - use standard password change
+        return changePassword('', newPassword, false);
+      }
+    } catch (error: unknown) {
+      authErrorHandler.logAuthError(error, 'AuthContext-ChangePasswordWithOAuthFallback', {
+        userId: currentUser?.uid,
+        step: 'unexpected_error'
+      });
+
+      return {
+        success: false,
+        error: 'An unexpected error occurred',
+        suggestedAction: 'Please try again or contact support'
+      };
     }
   }
 
@@ -623,11 +834,14 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
     login,
     guestLogin,
     googleLogin,
+    reauthenticateWithGoogle,
     appleLogin,
+    reauthenticateWithApple,
     logout,
     updateUserProfile,
     refreshAuth,
     changePassword,
+    changePasswordWithOAuthFallback,
     resetPassword,
     getAuthErrorMessage,
     validateAuthState,

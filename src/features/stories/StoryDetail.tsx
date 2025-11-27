@@ -17,7 +17,7 @@ import {
   increment,
   Timestamp 
 } from 'firebase/firestore';
-import { Heart, MessageCircle, ArrowLeft, Share, Send, Download, User } from 'lucide-react';
+import { Heart, MessageCircle, ArrowLeft, Share, Download, User } from 'lucide-react';
 import ThemeToggle from '../../components/common/ui/ThemeToggle';
 import LanguageSelector from '../../components/common/forms/LanguageSelector';
 import LazyImage from '../../components/common/ui/LazyImage';
@@ -25,8 +25,8 @@ import SafeImage from '../../components/common/SafeImage';
 import notificationService from '../../services/notificationService';
 import { filterChatMessage, getChatViolationMessage, logChatViolation } from '../../utils/content/chatFilter';
 import FooterNav from '../../components/layout/FooterNav';
+import CommentSection from '../../components/common/comments/CommentSection';
 import './StoryDetail.css';
-import { SafeCommentsList } from '../../components/common/safety/SafeComment';
 
 interface Story {
   id: string;
@@ -546,54 +546,13 @@ export default function StoryDetail() {
               </div>
             )}
 
-            {/* Comments Section */}
+            {/* Comments Section - Using Centralized Real-Time System */}
             <div className="comments-section">
-              {/* Safe Comments List */}
-              <SafeCommentsList
-                comments={comments}
-                currentUserId={currentUser?.uid}
-                onDelete={(index: number, commentId: string) => handleDeleteComment(commentId, comments[index]?.userId)}
-                context={`story-detail-${story.id}`}
-                emptyMessage="No comments yet. Be the first to comment!"
+              <CommentSection
+                contentId={story.id}
+                contentType="story"
+                className="story-detail-comments"
               />
-
-              {/* Add Comment Form */}
-              {!isGuest() ? (
-                <form 
-                  className="comment-form"
-                  onSubmit={handleCommentSubmit}
-                >
-                  <div className="comment-input-container">
-                    <SafeImage 
-                      src={currentUser?.photoURL || ''} 
-                      alt="Your avatar"
-                      placeholder="avatar"
-                      className="comment-avatar"
-                      width={32}
-                      height={32}
-                      style={{ borderRadius: '50%' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Add a comment..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="comment-input"
-                    />
-                    <button 
-                      type="submit"
-                      className="comment-submit-btn"
-                      disabled={!newComment.trim() || isCommenting}
-                    >
-                      {isCommenting ? '...' : <Send size={16} />}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="guest-comment-message">
-                  <span>Sign in to comment on stories</span>
-                </div>
-              )}
             </div>
           </div>
         </div>

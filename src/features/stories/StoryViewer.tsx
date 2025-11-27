@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, FormEvent, ChangeEvent, TouchEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StoriesService } from '../../services/api/storiesService';
-import { X, Share, Heart, MessageCircle, MoreVertical, Download, Send, Volume2, VolumeX, Trash2 } from 'lucide-react';
+import { X, Share, Heart, MessageCircle, MoreVertical, Download, Volume2, VolumeX, Trash2 } from 'lucide-react';
 import StoryProgress from './StoryProgress';
 import { db } from '../../lib/firebase';
 import { addDoc, collection, query, where, getDocs, deleteDoc, doc, updateDoc, increment, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
 import notificationService from '../../services/notificationService';
-import { SafeCommentsList } from '../../components/common/safety/SafeComment';
+import CommentSection from '../../components/common/comments/CommentSection';
 import SafeImage from '../../components/common/SafeImage';
 import { Story } from '../../types/models/story';
 
@@ -672,12 +672,12 @@ export default function StoryViewer({ userStories, currentStoryIndex, onClose, o
           )}
         </div>
 
-        {/* Comments Modal */}
-        {showComments && (
+        {/* Comments Modal - Using Centralized Real-Time System */}
+        {showComments && currentStory && (
           <div className="story-comments-modal">
             <div className="comments-header">
               <h4>Comments</h4>
-              <button 
+              <button
                 className="close-comments-btn"
                 onClick={() => {
                   setShowComments(false);
@@ -688,48 +688,14 @@ export default function StoryViewer({ userStories, currentStoryIndex, onClose, o
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="comments-list">
-              <SafeCommentsList
-                comments={comments}
-                currentUserId={currentUser?.uid}
-                onDelete={(index: number, commentId: string) => handleDeleteComment(commentId, comments[index]?.userId)}
-                context={`story-viewer-${currentStory?.id}`}
-                emptyMessage="No comments yet. Be the first to comment!"
+              <CommentSection
+                contentId={currentStory.id}
+                contentType="story"
+                className="story-comments"
               />
             </div>
-            
-            {currentUser && (
-              <form className="comment-form" onSubmit={handleCommentSubmit}>
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setNewComment(e.target.value)}
-                  onFocus={() => {
-                    // Pause story when user starts typing
-                    setIsPaused(true);
-                    console.log('🎥 Story paused - user is typing comment');
-                  }}
-                  onBlur={() => {
-                    // Resume story when user stops typing (but only if comments modal is still open)
-                    if (showComments && !newComment.trim()) {
-                      setIsPaused(true); // Keep paused if comments modal is open
-                    }
-                    console.log('🎥 Comment input blurred');
-                  }}
-                  placeholder="Add a comment..."
-                  maxLength={500}
-                  disabled={isSubmittingComment}
-                />
-                <button 
-                  type="submit" 
-                  disabled={!newComment.trim() || isSubmittingComment}
-                  className="send-comment-btn"
-                >
-                  <Send size={20} />
-                </button>
-              </form>
-            )}
           </div>
         )}
 

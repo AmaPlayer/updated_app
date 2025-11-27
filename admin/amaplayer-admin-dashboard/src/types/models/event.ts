@@ -26,6 +26,32 @@ export type EventType = 'talent_hunt' | 'community' | 'tournament' | 'general';
 export type ParticipationType = 'going' | 'interested' | 'maybe';
 
 /**
+ * Event state for competition flow
+ */
+export type EventState = 'open' | 'submissions_open' | 'submissions_closed' | 'results_declared';
+
+/**
+ * Leaderboard entry
+ */
+export interface LeaderboardEntry {
+  rank: 1 | 2 | 3;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  score?: number;
+  prize?: string;
+  submissionId: string;
+}
+
+/**
+ * Event requirements
+ */
+export interface EventRequirements {
+  description: string;
+  criteria?: string[];
+}
+
+/**
  * Core Event interface
  */
 export interface Event {
@@ -69,6 +95,13 @@ export interface Event {
   interestedIds?: string[];
   maybeIds?: string[];
   participantCount?: number;
+
+  // Submission & Competition fields (Phase 2) - For talent competition events
+  submissionDeadline?: Date | string | Timestamp;
+  eventState?: EventState;
+  eventRequirements?: EventRequirements;
+  leaderboard?: LeaderboardEntry[];
+  submissionCount?: number;
 }
 
 /**
@@ -100,6 +133,9 @@ export interface CreateEventData {
   requirements?: string[];
   prizes?: string[];
   tags?: string[];
+  // Competition fields
+  submissionDeadline?: Date | string;
+  eventRequirements?: EventRequirements;
 }
 
 /**
@@ -123,4 +159,9 @@ export interface UpdateEventData {
   prizes?: string[];
   tags?: string[];
   isActive?: boolean;
+  // Competition fields
+  submissionDeadline?: Date | string;
+  eventState?: EventState;
+  eventRequirements?: EventRequirements;
+  leaderboard?: LeaderboardEntry[];
 }

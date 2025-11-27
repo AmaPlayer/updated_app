@@ -14,17 +14,10 @@ const OrganizationInfoSection: React.FC<OrganizationInfoSectionProps> = ({
   isOwner,
   onEdit
 }) => {
-  const getFieldValue = (value: any): string => {
-    if (value === undefined || value === null || value === '') {
-      return 'Not specified';
-    }
-    return String(value);
-  };
-
-  const hasOrganizationInfo = personalDetails.organizationName || 
-                             personalDetails.organizationType || 
-                             personalDetails.location || 
-                             personalDetails.contactEmail || 
+  const hasOrganizationInfo = personalDetails.organizationName ||
+                             personalDetails.organizationType ||
+                             personalDetails.location ||
+                             personalDetails.contactEmail ||
                              personalDetails.website;
 
   return (
@@ -119,7 +112,7 @@ const OrganizationInfoSection: React.FC<OrganizationInfoSectionProps> = ({
                 <div className="info-content">
                   <span className="info-label">Website</span>
                   <span className="info-value">
-                    <a 
+                    <a
                       href={personalDetails.website.startsWith('http') ? personalDetails.website : `https://${personalDetails.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
