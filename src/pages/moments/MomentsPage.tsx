@@ -182,8 +182,7 @@ const MomentsPage: React.FC = () => {
     // Scroll to top and refresh functionality
     const videoFeedElement = videoFeedRef.current;
     if (videoFeedElement) {
-      videoFeedElement.scrollTo({ top: 0, behavior: 'smooth' });
-      setCurrentVideoIndex(0);
+      videoFeedElement.scrollTo({ top: 0, behavior: 'auto' });
     }
   };
 
