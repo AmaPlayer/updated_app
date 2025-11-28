@@ -8,6 +8,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   /* Optimize for touch interactions */
   touch-action: pan-y; /* Allow vertical scrolling but prevent horizontal */
@@ -370,10 +372,6 @@
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
-  .video-player-container {
-    width: 100%;
-  }
-
   .video-metadata {
     padding: 2rem 1rem 0.5rem;
     max-width: calc(100% - 4.5rem);
@@ -465,10 +463,6 @@
 
 /* Small mobile screens */
 @media (max-width: 480px) {
-  .video-player-container {
-    width: 100%;
-  }
-
   .video-wrapper {
     position: relative;
     width: 100%;
@@ -714,10 +708,6 @@
 
 /* Landscape orientation adjustments */
 @media (orientation: landscape) and (max-height: 600px) {
-  .video-player-container {
-    width: 100%;
-  }
-
   .video-metadata {
     padding: 1rem 1rem 0.5rem;
     max-width: calc(100% - 5rem);
