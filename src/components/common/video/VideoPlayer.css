@@ -2,16 +2,12 @@
 
 .video-player-container {
   position: relative;
-  width: 90%;
-  max-width: 600px;
+  width: 100%;
   height: 100%;
-  margin: 0 auto;
   background: #000;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   /* Optimize for touch interactions */
   touch-action: pan-y; /* Allow vertical scrolling but prevent horizontal */
@@ -54,18 +50,13 @@
 
 .video-player {
   width: 100%;
-  height: auto;
-  max-width: 100%;
-  max-height: 50vh;
+  height: 100%;
   object-fit: contain; /* Contain to fit within viewport without cropping */
   object-position: center;
   background: #000;
   outline: none !important;
   border: none !important;
-  border-radius: 12px;
   transition: opacity 0.3s ease;
-  /* Handle different aspect ratios */
-  aspect-ratio: 9/16;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -376,59 +367,11 @@
   z-index: -1;
 }
 
-/* Portrait video optimization */
-@media (orientation: portrait) {
-  .video-player {
-    /* For portrait videos on portrait screens - contain for proper fitting */
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    object-fit: contain;
-  }
-}
-
-/* Landscape video optimization */
-@media (orientation: landscape) {
-  .video-player {
-    /* For landscape videos on landscape screens - contain for proper fitting */
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    object-fit: contain;
-  }
-}
-
-/* Handle ultra-wide videos */
-@media (min-aspect-ratio: 16/9) {
-  .video-player {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    object-fit: contain;
-  }
-}
-
-/* Handle tall videos */
-@media (max-aspect-ratio: 9/16) {
-  .video-player {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    object-fit: contain;
-  }
-}
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .video-player-container {
-    width: 92%;
-    max-width: 500px;
-    border-radius: 16px;
-  }
-
-  .video-player {
-    border-radius: 16px;
-    max-height: 45vh;
+    width: 100%;
   }
 
   .video-metadata {
@@ -523,19 +466,7 @@
 /* Small mobile screens */
 @media (max-width: 480px) {
   .video-player-container {
-    width: 88%;
-    max-width: 420px;
-    border-radius: 20px;
-  }
-
-  .video-player {
-    /* Responsive sizing for small mobile devices */
     width: 100%;
-    height: auto;
-    max-width: 100%;
-    max-height: 43vh;
-    object-fit: contain;
-    border-radius: 20px;
   }
 
   .video-wrapper {
@@ -691,41 +622,8 @@
   border-color: rgba(76, 175, 80, 0.5);
 }
 
-/* Tablet screens */
-@media (min-width: 481px) and (max-width: 768px) {
-  .video-player-container {
-    width: 85%;
-    max-width: 480px;
-  }
-
-  .video-player {
-    max-height: 45vh;
-  }
-}
-
-/* Large screens and tablets landscape */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .video-player-container {
-    width: 70%;
-    max-width: 550px;
-  }
-
-  .video-player {
-    max-height: 50vh;
-  }
-}
-
-/* Extra large screens */
+/* Large screens engagement hover effects */
 @media (min-width: 1025px) {
-  .video-player-container {
-    width: 60%;
-    max-width: 600px;
-  }
-
-  .video-player {
-    max-height: 50vh;
-  }
-
   .engagement-btn {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
@@ -817,12 +715,7 @@
 /* Landscape orientation adjustments */
 @media (orientation: landscape) and (max-height: 600px) {
   .video-player-container {
-    width: 50%;
-    max-width: 500px;
-  }
-
-  .video-player {
-    max-height: 55vh;
+    width: 100%;
   }
 
   .video-metadata {
