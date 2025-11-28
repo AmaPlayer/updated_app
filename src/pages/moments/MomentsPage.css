@@ -99,7 +99,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   scroll-snap-type: y mandatory;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   /* Hide scrollbar while maintaining functionality */
   scrollbar-width: none; /* Firefox */
@@ -138,51 +138,6 @@
   contain: strict;
 }
 
-/* Video player styles */
-.video-player {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  background: #000;
-}
-
-/* Video controls overlay */
-.video-controls {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-  padding: 2rem 1rem 1rem;
-  color: white;
-  z-index: 10;
-}
-
-.video-metadata {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.creator-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.creator-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.creator-name {
-  font-weight: 600;
-  font-size: 1rem;
-}
 
 .video-description {
   font-size: 0.9rem;
@@ -231,26 +186,10 @@
   text-align: center;
 }
 
-/* Loading states */
-.moments-loading {
-  width: 100%;
-  height: calc(100vh - var(--nav-height, 60px) - var(--footer-height, 70px));
-  overflow: hidden;
-}
-
+/* Loading and Error skeletons */
 .moments-skeleton {
   width: 100%;
   height: 100vh;
-}
-
-/* Error states */
-.moments-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: calc(100vh - var(--nav-height, 60px) - var(--footer-height, 70px));
-  width: 100%;
-  background: var(--bg-primary, #000);
 }
 
 .moments-retry-handler {
@@ -365,19 +304,6 @@
     background: rgba(255, 255, 255, 0.2);
   }
   
-  .creator-avatar {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .creator-name {
-    font-size: 0.9rem;
-  }
-  
-  .video-description {
-    font-size: 0.85rem;
-  }
-  
   /* Mobile-specific loading and error states */
   .moments-loading,
   .moments-error,
@@ -419,23 +345,6 @@
     min-width: 44px;
     min-height: 44px;
     padding: 0.3rem;
-  }
-  
-  .video-controls {
-    padding: 1rem 0.75rem 0.75rem;
-  }
-  
-  .creator-avatar {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .creator-name {
-    font-size: 0.85rem;
-  }
-  
-  .video-description {
-    font-size: 0.8rem;
   }
 }
 
@@ -499,7 +408,6 @@
   }
   
   /* Prevent text selection on touch devices */
-  .video-metadata,
   .engagement-actions,
   .moments-loading,
   .moments-error,

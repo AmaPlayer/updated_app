@@ -14,7 +14,7 @@ import { useVideoAutoPlay } from '../../hooks/useVideoAutoPlay';
 import { useVideoPerformance } from '../../hooks/useVideoPerformance';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import VideoOptimizationUtils from '../../utils/videoOptimization';
-import { diversifyFeed, DEFAULT_DIVERSITY_CONFIG } from '../../utils/feedDiversity';
+import { diversifyFeed } from '../../utils/feedDiversity';
 import './MomentsPage.css';
 
 /**
@@ -39,7 +39,6 @@ const MomentsPage: React.FC = () => {
   // Network status monitoring
   const { networkStatus, isGoodConnection } = useNetworkStatus();
   const videoFeedRef = useRef<HTMLDivElement>(null);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [performanceSettings, setPerformanceSettings] = useState(
     VideoOptimizationUtils.getRecommendedSettings()
   );
@@ -122,20 +121,6 @@ const MomentsPage: React.FC = () => {
       const enableFeedDiversity = process.env.REACT_APP_ENABLE_FEED_DIVERSITY !== 'false';
       let processedMoments = result.moments;
 
-      // Debug: Log videos before diversity filter
-      console.log('📊 BEFORE diversity filter:', {
-        totalVideos: processedMoments.length,
-        userDistribution: processedMoments.reduce((acc, m) => {
-          acc[m.userDisplayName] = (acc[m.userDisplayName] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-        videoTypes: processedMoments.reduce((acc, m) => {
-          const type = m.isTalentVideo ? 'talent' : m.isPostVideo ? 'post' : 'moment';
-          acc[type] = (acc[type] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>)
-      });
-
       // Only apply diversity filter if we have enough videos (10+)
       // With small feeds, the diversity algorithm is too restrictive
       if (enableFeedDiversity && processedMoments.length >= 10) {
@@ -143,30 +128,25 @@ const MomentsPage: React.FC = () => {
         const maxConsecutive = parseInt(process.env.REACT_APP_FEED_MAX_CONSECUTIVE || '2', 10);
         const maxPercentage = parseFloat(process.env.REACT_APP_FEED_MAX_PERCENTAGE || '0.3');
 
-        console.log('🎯 Applying diversity filter with:', { maxConsecutive, maxPercentage, videoCount: processedMoments.length });
-
         processedMoments = diversifyFeed(processedMoments, {
           maxConsecutiveFromSameUser: maxConsecutive,
           maxPercentageFromSingleUser: maxPercentage
         });
 
-        // Debug: Log videos after diversity filter
-        console.log('📊 AFTER diversity filter:', {
-          totalVideos: processedMoments.length,
-          userDistribution: processedMoments.reduce((acc, m) => {
-            acc[m.userDisplayName] = (acc[m.userDisplayName] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>),
-          videosFiltered: result.moments.length - processedMoments.length
-        });
-      } else if (processedMoments.length > 0) {
-        console.log('⏭️ Skipped diversity filter (feed too small, need 10+ videos)');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📊 Feed diversity filter applied:', {
+            totalVideos: processedMoments.length,
+            videosFiltered: result.moments.length - processedMoments.length
+          });
+        }
       }
 
       setMoments(processedMoments);
       setRetryCount(0); // Reset retry count on success
     } catch (err) {
-      console.error('Failed to fetch moments:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to fetch moments:', err);
+      }
       let errorMessage = 'Failed to load videos. Please try again.';
       
       if (!networkStatus.isOnline) {
@@ -207,51 +187,27 @@ const MomentsPage: React.FC = () => {
     }
   };
 
-  // Handle swipe navigation
+  // Handle swipe navigation with optimized scrolling
   const handleSwipeUp = useCallback(() => {
-    // Navigate to next video
-    if (currentVideoIndex < moments.length - 1) {
-      const nextIndex = currentVideoIndex + 1;
-      setCurrentVideoIndex(nextIndex);
-      
-      const videoFeedElement = videoFeedRef.current;
-      if (videoFeedElement) {
-        const nextVideoElement = videoFeedElement.children[nextIndex] as HTMLElement;
-        if (nextVideoElement) {
-          nextVideoElement.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        }
-      }
+    const videoFeedElement = videoFeedRef.current;
+    if (videoFeedElement) {
+      // Use programmatic scroll for better performance
+      videoFeedElement.scrollBy({
+        top: videoFeedElement.clientHeight,
+        behavior: 'auto'
+      });
     }
-  }, [currentVideoIndex, moments.length]);
-
-  const handleSwipeDown = useCallback(() => {
-    // Navigate to previous video
-    if (currentVideoIndex > 0) {
-      const prevIndex = currentVideoIndex - 1;
-      setCurrentVideoIndex(prevIndex);
-      
-      const videoFeedElement = videoFeedRef.current;
-      if (videoFeedElement) {
-        const prevVideoElement = videoFeedElement.children[prevIndex] as HTMLElement;
-        if (prevVideoElement) {
-          prevVideoElement.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        }
-      }
-    }
-  }, [currentVideoIndex]);
-
-  const handleSwipeLeft = useCallback(() => {
-    // Could be used for additional features like showing video info
   }, []);
 
-  const handleSwipeRight = useCallback(() => {
-    // Could be used for additional features like quick actions
+  const handleSwipeDown = useCallback(() => {
+    const videoFeedElement = videoFeedRef.current;
+    if (videoFeedElement) {
+      // Use programmatic scroll for better performance
+      videoFeedElement.scrollBy({
+        top: -videoFeedElement.clientHeight,
+        behavior: 'auto'
+      });
+    }
   }, []);
 
   // Handle like action
@@ -265,25 +221,11 @@ const MomentsPage: React.FC = () => {
     );
   };
 
-  // Handle comment action
-  const handleComment = (momentId: string) => {
-    // The VideoPlayer component now handles the comment modal display
-  };
-
-  // Handle share action
-  const handleShare = (momentId: string) => {
-    // The VideoPlayer component now handles the share modal display
-  };
-
-  // Handle video end
-  const handleVideoEnd = () => {
-    // Video ended - the auto-play system will handle moving to the next video
-    const activeVideoId = getActiveVideoId();
-  };
-
   // Handle video error
   const handleVideoError = (error: string) => {
-    console.error('Video error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Video error:', error);
+    }
   };
 
   // Handle create moment button click
@@ -365,7 +307,9 @@ const MomentsPage: React.FC = () => {
 
       alert('Moment created successfully!');
     } catch (err) {
-      console.error('Error uploading moment:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error uploading moment:', err);
+      }
       setUploadError('Failed to upload moment. Please try again.');
     } finally {
       setUploading(false);
@@ -490,8 +434,9 @@ const MomentsPage: React.FC = () => {
           {!loading && !error && moments.length > 0 && (
             <VideoErrorBoundary
               onError={(error, errorInfo) => {
-                console.error('Video component error:', error, errorInfo);
-                // Could send to error tracking service here
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('Video component error:', error, errorInfo);
+                }
               }}
             >
               <div 
@@ -527,17 +472,12 @@ const MomentsPage: React.FC = () => {
                         currentUserName={currentUser?.displayName || undefined}
                         currentUserPhotoURL={currentUser?.photoURL || null}
                         onLike={handleLike}
-                        onComment={handleComment}
-                        onShare={handleShare}
-                        onVideoEnd={handleVideoEnd}
                         onVideoError={handleVideoError}
                         onVideoRegister={registerVideo}
                         onVideoUnregister={unregisterVideo}
                         autoPlayEnabled={true}
                         onSwipeUp={handleSwipeUp}
                         onSwipeDown={handleSwipeDown}
-                        onSwipeLeft={handleSwipeLeft}
-                        onSwipeRight={handleSwipeRight}
                         enablePerformanceOptimizations={true}
                         preloadDistance={performanceSettings.preloadDistance}
                       />
