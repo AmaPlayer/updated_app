@@ -6,28 +6,29 @@
   min-height: 100vh;
   background: var(--bg-primary);
   color: var(--text-primary);
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .moments-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding-top: var(--nav-height, 60px);
-  padding-bottom: var(--footer-height, 70px);
-  overflow: hidden;
-  max-width: 600px;
-  margin: 0 auto;
   width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
 }
 
 .moments-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  position: relative;
   width: 100%;
   height: 100%;
-  background: var(--bg-primary);
+  overflow: hidden;
 }
 
 /* Loading state */
@@ -90,57 +91,87 @@
   opacity: 0.8;
 }
 
-/* Full-screen container for video feed */
+/* Video feed container - Instagram Reels style full-screen */
 .video-feed-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: 1;
   width: 100%;
   height: 100%;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow-y: scroll;
   overflow-x: hidden;
   scroll-snap-type: y mandatory;
-  scroll-behavior: auto;
+  scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
-  /* Hide scrollbar while maintaining functionality */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;
 }
 
 .video-feed-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
+  display: none;
 }
 
 .video-item {
   position: relative;
   width: 100%;
   height: 100vh;
-  height: 100dvh; /* Dynamic viewport height for mobile */
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+  flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: var(--bg-primary);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
   overflow: hidden;
-  /* Optimize for performance */
-  will-change: transform;
-  contain: layout style paint;
-  /* Ensure proper intersection observer detection */
-  min-height: 100vh;
-  min-height: 100dvh;
-  flex-shrink: 0;
-  transition: background 0.3s ease;
+  padding: 0;
+}
+
+/* Landscape mode - constrain to portrait-like container */
+@media (orientation: landscape) {
+  .video-item {
+    padding: 20px;
+  }
 }
 
 /* Video item positioning indicators */
 .video-item:not([data-video-index="0"]) {
-  /* Non-first videos can be optimized for off-screen rendering */
-  contain: strict;
+  contain: layout style paint;
 }
 
+/* Video player wrapper - Instagram Reels full-screen style */
+.video-player-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: #000;
+  flex-shrink: 0;
+  border-radius: 0;
+}
+
+/* Landscape mode - phone-like container with border */
+@media (orientation: landscape) {
+  .video-player-wrapper {
+    max-width: 500px;
+    height: calc(100vh - 40px);
+    border-radius: 12px;
+    border: 2px solid var(--border-color, #333);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .video-player-wrapper {
+    max-width: 450px;
+  }
+}
+
+.video-player-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 
 .video-description {
   font-size: 0.9rem;
@@ -257,167 +288,27 @@
   background: var(--accent-primary-hover);
 }
 
-/* Responsive design */
-@media (max-width: 768px) {
-  .moments-content {
-    padding-top: var(--nav-height-mobile, 56px);
-    padding-bottom: var(--footer-height-mobile, 60px);
-  }
-  
-  .video-feed-container {
-    /* Ensure proper mobile viewport handling */
-    height: calc(100vh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    height: calc(100dvh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    /* Enhanced touch scrolling */
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    /* Optimize for mobile performance */
-    will-change: scroll-position;
-  }
-  
-  .video-item {
-    height: calc(100vh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    height: calc(100dvh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    /* Optimize for mobile touch interactions */
-    touch-action: pan-y;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  .video-controls {
-    padding: 1.5rem 1rem 1rem;
-  }
-  
-  .engagement-actions {
-    right: 0.75rem;
-    bottom: 5rem;
-    gap: 1rem;
-  }
-  
-  .engagement-btn {
-    padding: 0.4rem;
-    min-width: 48px;
-    min-height: 48px;
-    /* Better touch feedback */
-    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
-    touch-action: manipulation;
-  }
-  
-  .engagement-btn:active {
-    transform: scale(0.9);
-    background: rgba(255, 255, 255, 0.2);
-  }
-  
-  /* Mobile-specific loading and error states */
-  .moments-loading,
-  .moments-error,
-  .moments-empty {
-    padding: 1rem;
-  }
-  
-  .retry-btn {
-    min-width: 48px;
-    min-height: 48px;
-    -webkit-tap-highlight-color: rgba(0, 123, 255, 0.2);
-    touch-action: manipulation;
-  }
-  
-  .retry-btn:active {
-    transform: scale(0.95);
-  }
-}
-
-/* Small mobile screens */
-@media (max-width: 480px) {
-  .video-feed-container {
-    height: calc(100vh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    height: calc(100dvh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-  }
-  
-  .video-item {
-    height: calc(100vh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-    height: calc(100dvh - var(--nav-height-mobile, 56px) - var(--footer-height-mobile, 60px));
-  }
-  
-  .engagement-actions {
-    right: 0.5rem;
-    bottom: 4rem;
-    gap: 0.8rem;
-  }
-  
-  .engagement-btn {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0.3rem;
-  }
-}
 
 /* Orientation-specific adjustments */
 @media (orientation: landscape) and (max-height: 600px) {
-  .video-feed-container {
-    /* Adjust for landscape mobile devices */
-    height: 100vh;
-    height: 100dvh;
-  }
-  
-  .video-item {
-    height: 100vh;
-    height: 100dvh;
-  }
-}
-
-@media (orientation: portrait) {
-  .video-feed-container {
-    /* Optimize for portrait orientation */
-    height: calc(100vh - var(--nav-height, 60px) - var(--footer-height, 70px));
-    height: calc(100dvh - var(--nav-height, 60px) - var(--footer-height, 70px));
-  }
-  
-  .video-item {
-    height: calc(100vh - var(--nav-height, 60px) - var(--footer-height, 70px));
-    height: calc(100dvh - var(--nav-height, 60px) - var(--footer-height, 70px));
+  .moments-content {
+    padding: 10px;
+    margin: 50px auto 0;
   }
 }
 
 /* Touch device optimizations */
 @media (pointer: coarse) {
-  .video-feed-container {
-    /* Optimize scrolling for touch devices */
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    scroll-snap-type: y mandatory;
-  }
-  
-  .video-item {
-    /* Better touch interaction */
-    touch-action: pan-y;
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-  
   .engagement-btn,
   .retry-btn {
-    /* Ensure proper touch targets */
     min-width: 48px;
     min-height: 48px;
-    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
     touch-action: manipulation;
   }
-  
+
   .engagement-btn:active,
   .retry-btn:active {
     transform: scale(0.9);
-  }
-  
-  /* Prevent text selection on touch devices */
-  .engagement-actions,
-  .moments-loading,
-  .moments-error,
-  .moments-empty {
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
   }
 }
 
@@ -867,52 +758,5 @@
 
   .upload-trigger-btn {
     padding: 30px 20px;
-  }
-}
-
-/* Responsive viewport widths matching homepage */
-@media (max-width: 768px) {
-  .moments-content {
-    max-width: 100%;
-    padding: 15px;
-  }
-}
-
-@media (max-width: 480px) {
-  .moments-content {
-    max-width: 100%;
-    padding: 10px;
-  }
-}
-
-/* Medium devices (768px to 991px) */
-@media (min-width: 768px) and (max-width: 991px) {
-  .moments-content {
-    max-width: 90%;
-    padding: 15px;
-  }
-}
-
-/* Large devices (992px to 1199px) */
-@media (min-width: 992px) and (max-width: 1199px) {
-  .moments-content {
-    max-width: 750px;
-    padding: 18px;
-  }
-}
-
-/* Extra large devices (1200px to 1399px) */
-@media (min-width: 1200px) and (max-width: 1399px) {
-  .moments-content {
-    max-width: 800px;
-    padding: 20px;
-  }
-}
-
-/* Ultra wide screens (1400px and up) */
-@media (min-width: 1400px) {
-  .moments-content {
-    max-width: 900px;
-    padding: 25px;
   }
 }

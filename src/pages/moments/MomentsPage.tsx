@@ -186,28 +186,6 @@ const MomentsPage: React.FC = () => {
     }
   };
 
-  // Handle swipe navigation with optimized scrolling
-  const handleSwipeUp = useCallback(() => {
-    const videoFeedElement = videoFeedRef.current;
-    if (videoFeedElement) {
-      // Use programmatic scroll for better performance
-      videoFeedElement.scrollBy({
-        top: videoFeedElement.clientHeight,
-        behavior: 'auto'
-      });
-    }
-  }, []);
-
-  const handleSwipeDown = useCallback(() => {
-    const videoFeedElement = videoFeedRef.current;
-    if (videoFeedElement) {
-      // Use programmatic scroll for better performance
-      videoFeedElement.scrollBy({
-        top: -videoFeedElement.clientHeight,
-        behavior: 'auto'
-      });
-    }
-  }, []);
 
   // Handle like action
   const handleLike = (momentId: string, liked: boolean, likesCount: number) => {
@@ -464,22 +442,22 @@ const MomentsPage: React.FC = () => {
                         </div>
                       }
                     >
-                      <VideoPlayer
-                        moment={moment}
-                        isActive={isVideoInView(moment.id)}
-                        currentUserId={currentUser?.uid}
-                        currentUserName={currentUser?.displayName || undefined}
-                        currentUserPhotoURL={currentUser?.photoURL || null}
-                        onLike={handleLike}
-                        onVideoError={handleVideoError}
-                        onVideoRegister={registerVideo}
-                        onVideoUnregister={unregisterVideo}
-                        autoPlayEnabled={true}
-                        onSwipeUp={handleSwipeUp}
-                        onSwipeDown={handleSwipeDown}
-                        enablePerformanceOptimizations={true}
-                        preloadDistance={performanceSettings.preloadDistance}
-                      />
+                      <div className="video-player-wrapper">
+                        <VideoPlayer
+                          moment={moment}
+                          isActive={isVideoInView(moment.id)}
+                          currentUserId={currentUser?.uid}
+                          currentUserName={currentUser?.displayName || undefined}
+                          currentUserPhotoURL={currentUser?.photoURL || null}
+                          onLike={handleLike}
+                          onVideoError={handleVideoError}
+                          onVideoRegister={registerVideo}
+                          onVideoUnregister={unregisterVideo}
+                          autoPlayEnabled={true}
+                          enablePerformanceOptimizations={true}
+                          preloadDistance={performanceSettings.preloadDistance}
+                        />
+                      </div>
                     </VideoErrorBoundary>
                   </div>
                 ))}
